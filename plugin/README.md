@@ -77,6 +77,12 @@ patterns redacted. Digests are written to `POST /api/v1/memories` tagged
 `session-capture` and carry the `session_id` so the server-side Reflector can
 consolidate them into semantic summaries.
 
+`SessionEnd` fires on exit, `/clear`, and resume, so the same turns can be
+offered more than once. The hook stores a hash of each digest under
+`~/.kemory/.captured/<session_id>` and skips a write whose content it has
+already stored, so repeats do not accumulate duplicate memories. The hash is
+recorded only after the write succeeds.
+
 Redaction is pattern-based, so treat it as a safety net rather than a
 guarantee. If you work with sensitive material, leave capture off.
 

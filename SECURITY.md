@@ -18,6 +18,11 @@ AWS access key ids, PEM private-key headers) before upload. This is
 pattern-matching, not a guarantee — a novel or unusual secret format can pass
 through. If you work with sensitive material, leave capture disabled.
 
+**Local state.** Capture writes a digest hash per session under
+`~/.kemory/.captured/` for de-duplication, and the setup notice writes a
+timestamp to `~/.kemory/.setup-hint`. Neither contains conversation content.
+
 **Credentials** are read from the Kemory CLI's local credential file, or from
 `KEMORY_URL` / `KEMORY_TOKEN`. The plugin never writes credentials anywhere
-and never logs them.
+and never logs them, and refuses to send them to a URL that is not
+`http://` or `https://`.

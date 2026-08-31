@@ -26,7 +26,7 @@ export KEMORY_MAX_TURNS="${KEMORY_CAPTURE_MAX_TURNS:-12}"
 export KEMORY_CAPTURE_SOURCE="${KEMORY_CAPTURE_SOURCE:-claude-code}"
 
 python3 <<'PY' 2>/dev/null
-import json, os, re, urllib.request
+import hashlib, json, os, re, urllib.request
 
 MAX_CHARS = 8000
 SECRET = re.compile(
@@ -46,8 +46,11 @@ except Exception:
     die()
 if not url or not auth_value:
     die()
+if not url.startswith(("http://", "https://")):
+    die()  # never send a credential to a non-HTTP scheme
 
 session_id = hook.get("session_id") or ""
+reason = hook.get("reason") or "unknown"
 transcript = hook.get("transcript_path") or ""
 if not transcript or not os.path.isfile(transcript):
     die()
@@ -88,6 +91,16 @@ content = (
     f"{hook.get('cwd', 'unknown')}\n\n{body}"
 )
 
+digest = hashlib.sha256(content.encode()).hexdigest()
+state = os.path.expanduser("~/.kemory/.captured")
+try:
+    os.makedirs(state, exist_ok=True)
+    marker = os.path.join(state, (session_id or "nosession")[:64].replace("/", "_"))
+    if os.path.isfile(marker) and open(marker).read().strip() == digest:
+        die()  # identical digest already stored for this session
+except OSError:
+    marker = None
+
 req = urllib.request.Request(
     url + "/api/v1/memories",
     data=json.dumps({
@@ -100,6 +113,7 @@ req = urllib.request.Request(
             "source": os.environ.get("KEMORY_CAPTURE_SOURCE", "claude-code"),
             "capture": "auto",
             "turns": len(turns),
+            "end_reason": reason,
         },
     }).encode(),
     headers={
@@ -111,6 +125,12 @@ req = urllib.request.Request(
 try:
     urllib.request.urlopen(req, timeout=8).read()
 except Exception:
-    pass
+    raise SystemExit(0)  # never record a digest we did not manage to store
+if marker:
+    try:
+        with open(marker, "w") as fh:
+            fh.write(digest)
+    except OSError:
+        pass
 PY
 exit 0

@@ -39,6 +39,22 @@ while IFS= read -r s; do
 done < <(jq -r '.hooks[][].hooks[].command | select(contains("CLAUDE_PLUGIN_ROOT"))' \
           plugin/hooks/hooks.json | awk '{print $1}')
 
+echo "→ rate reminder is silent on an empty recall"
+if echo '{"tool_response":{"memories":[],"retrieval":{"recall_id":"x"}}}' \
+     | plugin/scripts/rate-reminder.sh | grep -q .; then
+  echo "  FAIL reminder fired for a recall that returned nothing"; fail=1
+else
+  echo "  ok   silent on empty recall"
+fi
+
+echo "→ rate reminder still fires when memories came back"
+if echo '{"tool_response":{"memories":[1],"retrieval":{"recall_id":"x"}}}' \
+     | plugin/scripts/rate-reminder.sh | grep -q recall_id; then
+  echo "  ok   fires on non-empty recall"
+else
+  echo "  FAIL reminder did not fire for a non-empty recall"; fail=1
+fi
+
 echo "→ session-start is silent when disabled"
 if KEMORY_CONTEXT=0 sh -c 'echo "{}" | plugin/scripts/session-start.sh' | grep -q .; then
   echo "  FAIL session-start emitted output with KEMORY_CONTEXT=0"; fail=1
