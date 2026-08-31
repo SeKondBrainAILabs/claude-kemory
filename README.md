@@ -74,9 +74,8 @@ export KEMORY_API_KEY=kemory-community-ci-key
 ```
 
 `kemory login --local` skips OAuth and stores a machine-local API key for
-this case. `KEMORY_URL` defaults to hosted Kemory and steers the **hooks**;
-the bundled MCP server runs the CLI, so point that at your instance with
-`kemory --env local login` or configure your own MCP entry.
+this case. `KEMORY_URL` is honoured by both the hooks and the bundled MCP
+bridge, so setting it points the whole plugin at your instance.
 
 </details>
 

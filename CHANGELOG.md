@@ -3,6 +3,23 @@
 All notable changes to this project are documented here. This project follows
 [Semantic Versioning](https://semver.org/).
 
+## [0.1.1] — 2026-08-31
+
+### Fixed
+- The rate reminder only matched `kemory_recall_memory` and
+  `kemory_get_context`, so it never fired for `kemory_recall` (an alias of the
+  former), `kemory_ask`, `kemory_memory`, `kemory_find_similar` or the
+  `kemory_get_*` family. Verified live: a `kemory_recall` returning two
+  memories produced no reminder. The matcher now covers the recall family and
+  gates on a `recall_id` or non-empty result list, so write calls never
+  trigger it. Fails closed on unparseable input.
+
+### Changed
+- Sign-in leads with `kemory login` (OAuth device flow) instead of exporting
+  a long-lived `KEMORY_API_KEY`; the bundled MCP server uses the CLI's stdio
+  bridge so one login covers tools and hook credentials. Documents installing
+  the CLI, which the README previously never mentioned.
+
 ## [0.1.0] — 2026-08-31
 
 Initial release. Claude Code only.
