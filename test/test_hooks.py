@@ -186,6 +186,27 @@ class HookTest(unittest.TestCase):
         self.assertIn("3 memories", ctx)
         self.assertIn("rc_x", ctx)
 
+    def test_reminder_handles_real_mcp_payload(self):
+        """Regression: an MCP tool_response is a LIST of content blocks, not the
+        payload dict. Captured from a live PostToolUse hook — every synthetic
+        shape in this file was invented, and the invented ones all passed while
+        the real one produced nothing."""
+        fixture = json.loads((ROOT / "test" / "fixtures" /
+                              "posttooluse-mcp-recall.json").read_text())
+        self.assertIsInstance(fixture["tool_response"], list,
+                              "fixture must keep the real MCP envelope shape")
+        r = self.run_script("rate-reminder.sh", fixture)
+        ctx = json.loads(r.stdout)["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("rc_0123456789abcdef0123456789abcdef", ctx)
+        self.assertIn("1 memory", ctx)
+
+    def test_reminder_silent_on_empty_mcp_payload(self):
+        r = self.run_script("rate-reminder.sh", {
+            "tool_response": [{"type": "text", "text": json.dumps(
+                {"total": 0, "showing": 0, "memories": [],
+                 "retrieval": {"recall_id": "rc_empty"}})}]})
+        self.assertEqual(r.stdout.strip(), "")
+
     def test_reminder_silent_on_unparseable_input(self):
         # Fail CLOSED, not open: the matcher covers the whole kemory_* recall
         # family, so an unparseable non-recall response must not produce a

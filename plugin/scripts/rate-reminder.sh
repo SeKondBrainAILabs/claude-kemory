@@ -20,18 +20,40 @@ def out(rid, n):
     print(rid or "unknown", n)
     raise SystemExit(0)
 
+def unwrap(r):
+    """Normalise a tool_response into the recall payload dict.
+
+    An MCP tool result arrives as a LIST of content blocks --
+    [{"type":"text","text":"<json>"}] -- not as the payload itself. Older
+    shapes (a bare dict, or a JSON string) are still accepted.
+    """
+    if isinstance(r, list):
+        for block in r:
+            if not isinstance(block, dict):
+                continue
+            txt = block.get("text")
+            if isinstance(txt, str):
+                try:
+                    parsed = json.loads(txt)
+                except Exception:
+                    continue
+                if isinstance(parsed, dict):
+                    return parsed
+        return None
+    if isinstance(r, str):
+        try:
+            r = json.loads(r)
+        except Exception:
+            return None
+    return r if isinstance(r, dict) else None
+
 try:
     d = json.load(sys.stdin)
 except Exception:
-    out(None, 0)                      # cannot tell: stay silent
+    out(None, 0)
 
-r = d.get("tool_response")
-if isinstance(r, str):
-    try:
-        r = json.loads(r)
-    except Exception:
-        r = None
-if not isinstance(r, dict):
+r = unwrap(d.get("tool_response"))
+if r is None:
     out(None, 0)
 
 rid = (r.get("retrieval") or {}).get("recall_id")
@@ -43,13 +65,15 @@ for key in ("memories", "results", "items"):
         count = len(v)
         break
 if count is None:
-    t = r.get("total") or r.get("showing") or r.get("count")
-    count = t if isinstance(t, int) else None
+    for key in ("showing", "total", "count"):
+        v = r.get(key)
+        if isinstance(v, int):
+            count = v
+            break
 
 if count == 0:
-    out(rid, 0)                       # recall returned nothing
+    out(rid, 0)
 if count is None:
-    # No countable results. Only a recall_id proves this was a rateable recall.
     out(rid, 1 if rid else 0)
 out(rid, count)
 ' 2>/dev/null || printf 'unknown 0')"

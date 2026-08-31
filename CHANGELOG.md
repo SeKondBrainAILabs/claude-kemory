@@ -3,6 +3,19 @@
 All notable changes to this project are documented here. This project follows
 [Semantic Versioning](https://semver.org/).
 
+## [0.1.3] — 2026-08-31
+
+### Fixed
+- **The rate reminder never worked for MCP tools.** A PostToolUse
+  `tool_response` from an MCP server is a *list* of content blocks
+  (`[{"type":"text","text":"<json>"}]`), not the payload object. The script
+  only handled a dict or a JSON string, so on 0.1.0–0.1.1 it reported
+  `recall_id=unknown` (useless for rating) and on 0.1.2, after the fail-closed
+  change, it went silent entirely. It now unwraps the MCP envelope.
+- Captured a real hook payload as `test/fixtures/posttooluse-mcp-recall.json`
+  and test against it. Every prior synthetic shape was invented, and all of
+  them passed while the real one produced nothing.
+
 ## [0.1.2] — 2026-08-31
 
 ### Fixed
