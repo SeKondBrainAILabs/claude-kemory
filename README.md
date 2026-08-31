@@ -1,8 +1,9 @@
 # claude-kemory
 
 Persistent, cross-session memory for Claude Code, powered by
-[Kemory](https://github.com/SeKondBrainAILabs/kemory-community). Works with
-hosted Kemory and the open-source community edition — same wire protocol.
+[Kemory](https://kemory.sekondbrain.ai). Works with hosted Kemory and the
+open-source [community edition](https://github.com/SeKondBrainAILabs/kemory-community)
+— same wire protocol.
 
 An MCP server gives an agent memory *tools*. This plugin makes it actually
 use them: your context is injected at session start, recalls get rated so
@@ -11,27 +12,7 @@ they are lost to compaction.
 
 ## Quickstart
 
-**1. Get a Kemory backend.** Either sign in to hosted Kemory with the CLI:
-
-```bash
-kemory login
-```
-
-…or run the community edition locally:
-
-```bash
-git clone https://github.com/SeKondBrainAILabs/kemory-community.git
-cd kemory-community && docker compose -f docker-compose.community.yml up -d --build
-```
-
-For the local stack, point the plugin at it:
-
-```bash
-export KEMORY_URL=http://127.0.0.1:8111
-export KEMORY_API_KEY=kemory-community-ci-key
-```
-
-**2. Install the plugin.**
+**1. Install the plugin.**
 
 ```
 /plugin marketplace add SeKondBrainAILabs/claude-kemory
@@ -41,16 +22,44 @@ export KEMORY_API_KEY=kemory-community-ci-key
 /plugin install kemory@kemory
 ```
 
-**3. Check it works.**
+**2. Add your key** from [kemory.sekondbrain.ai](https://kemory.sekondbrain.ai):
+
+```bash
+export KEMORY_API_KEY="..."
+```
+
+**3. Confirm it works.**
 
 ```
 /kemory:status
 ```
 
-Reports whether your credentials resolve, whether the API accepts them, and
-how capture and context injection are configured. Start a session and your
-namespace summaries are injected automatically; if Kemory is not reachable,
-the plugin also tells you once what to fix.
+That is the whole setup. From the next session your namespace summaries are
+injected automatically, and recalls get rated so retrieval keeps improving.
+
+<details>
+<summary>Other ways to connect</summary>
+
+The plugin never requires the CLI — it only needs a reachable Kemory and a
+credential. Pick whichever suits you:
+
+- **Kemory CLI** — `kemory login` stores credentials the plugin reads
+  automatically, and the plugin's bundled MCP server runs `kemory mcp serve`.
+- **Hosted connector** — add Kemory in your claude.ai connector settings.
+  Disable the plugin's bundled MCP server so you do not run two.
+- **Self-hosted / community edition** — run the stack, then point at it:
+
+  ```bash
+  git clone https://github.com/SeKondBrainAILabs/kemory-community.git
+  cd kemory-community && docker compose -f docker-compose.community.yml up -d --build
+  export KEMORY_URL=http://127.0.0.1:8111
+  export KEMORY_API_KEY=kemory-community-ci-key
+  ```
+
+`KEMORY_URL` defaults to the hosted API, so you only set it when pointing
+somewhere else. Run `/kemory:status` after any of these to confirm.
+
+</details>
 
 ## What it does
 
@@ -126,5 +135,6 @@ plugin/
 └── scripts/{rate-reminder,capture}.sh
 ```
 
-Apache-2.0. Server, MCP tools, and CLI live in
+Apache-2.0. Kemory itself lives at [kemory.sekondbrain.ai](https://kemory.sekondbrain.ai);
+the open-source server, MCP tools, and CLI are in
 [kemory-community](https://github.com/SeKondBrainAILabs/kemory-community).

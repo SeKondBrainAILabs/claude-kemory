@@ -66,14 +66,14 @@ export KEMORY_AUTO_CAPTURE=1
 | `KEMORY_CAPTURE_MAX_TURNS` | `12` | How many recent user turns to include |
 | `KEMORY_CAPTURE_SOURCE` | `claude-code` | Value recorded in the memory's `metadata.source` |
 | `KEMORY_ENV` | `prod` | Which credentials file to read |
-| `KEMORY_URL` | — | Kemory base URL — only needed if you have no CLI credentials |
-| `KEMORY_TOKEN` | — | Bearer token (hosted Kemory) |
-| `KEMORY_API_KEY` | — | API key (community edition, sent as `X-API-Key`) |
+| `KEMORY_URL` | `https://api.kemory.sekondbrain.ai` | Override only for a self-hosted or community instance |
+| `KEMORY_TOKEN` | — | Bearer token, sent as `Authorization: Bearer` |
+| `KEMORY_API_KEY` | — | API key from kemory.sekondbrain.ai, sent as `X-API-Key` |
 
 All hooks that reach the API share one credential resolver
 (`scripts/lib.sh`): the CLI's `~/.kemory/credentials` if present, otherwise
-`KEMORY_URL` plus either `KEMORY_TOKEN` (hosted, sent as a bearer token) or
-`KEMORY_API_KEY` (community edition, sent as `X-API-Key`). With none of
+`KEMORY_API_KEY` or `KEMORY_TOKEN`, against `KEMORY_URL` (defaulting to
+hosted Kemory). The API accepts either credential style. With none of
 those, every hook stays silent.
 
 What is captured: your own turns only (assistant replies and tool output are

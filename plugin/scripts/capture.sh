@@ -29,10 +29,17 @@ python3 <<'PY' 2>/dev/null
 import hashlib, json, os, re, urllib.request
 
 MAX_CHARS = 8000
+# Redaction must not eat ordinary prose: developer conversations say "token"
+# and "secret" constantly, so a keyword only redacts when it is followed by an
+# actual assignment and a value long enough to be a credential.
 SECRET = re.compile(
-    r'(?i)(bearer\s+[\w\-\.]+|(?:api[_-]?key|token|secret|password|passwd)'
-    r'["\'\s:=]+[^\s"\',}]+|sk-[A-Za-z0-9]{16,}|gh[pousr]_[A-Za-z0-9]{20,}'
-    r'|AKIA[0-9A-Z]{16}|-----BEGIN[^-]+PRIVATE KEY-----)'
+    r'(?i)(bearer\s+[\w\-\.]{8,}'
+    r'|(?:api[_-]?key|api[_-]?token|access[_-]?token|auth[_-]?token|token'
+    r'|secret|password|passwd|pwd)\s*[:=]\s*["\']?[^\s"\',;}]{6,}'
+    r'|sk-[A-Za-z0-9]{16,}|gh[pousr]_[A-Za-z0-9]{20,}'
+    r'|AKIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{10,}'
+    r'|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}'
+    r'|-----BEGIN[^-]+PRIVATE KEY-----)'
 )
 
 def die():

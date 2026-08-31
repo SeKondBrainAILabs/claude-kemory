@@ -8,16 +8,20 @@
 # Hosted Kemory authenticates with a bearer token; the community edition
 # authenticates with X-API-Key only (backend/core/auth.py), so both are
 # supported and detected rather than assumed.
+# Hosted Kemory. Only override KEMORY_URL when pointing at a self-hosted or
+# community instance, so the common case needs a key and nothing else.
+KEMORY_DEFAULT_URL="${KEMORY_DEFAULT_URL:-https://api.kemory.sekondbrain.ai}"
+
 kemory_resolve_auth() {
   local creds url token api_key
   url="" ; token="" ; api_key=""
 
   if [ -n "${KEMORY_API_KEY:-}" ]; then
     api_key="$KEMORY_API_KEY"
-    url="${KEMORY_URL:-}"
+    url="${KEMORY_URL:-$KEMORY_DEFAULT_URL}"
   elif [ -n "${KEMORY_TOKEN:-}" ]; then
     token="$KEMORY_TOKEN"
-    url="${KEMORY_URL:-}"
+    url="${KEMORY_URL:-$KEMORY_DEFAULT_URL}"
   else
     creds="$HOME/.kemory/credentials-${KEMORY_ENV:-prod}"
     [ -r "$creds" ] || creds="$HOME/.kemory/credentials"

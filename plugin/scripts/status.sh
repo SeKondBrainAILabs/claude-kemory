@@ -16,15 +16,15 @@ echo
 # --- credentials -----------------------------------------------------------
 if kemory_resolve_auth; then
   case "$KEMORY_AUTH_HEADER" in
-    X-API-Key:*)      mode="X-API-Key (community edition)" ;;
-    Authorization:*)  mode="Bearer token (hosted)" ;;
+    X-API-Key:*)      mode="API key" ;;
+    Authorization:*)  mode="bearer token" ;;
     *)                mode="unknown" ;;
   esac
   ok "credentials resolved — $mode"
   info "endpoint: $KEMORY_BASE_URL"
 else
   bad "no credentials"
-  info "run 'kemory login', or set KEMORY_URL with KEMORY_TOKEN (hosted) or KEMORY_API_KEY (self-hosted)"
+  info "set KEMORY_API_KEY with a key from https://kemory.sekondbrain.ai, or run 'kemory login'"
 fi
 
 # --- API reachability ------------------------------------------------------
