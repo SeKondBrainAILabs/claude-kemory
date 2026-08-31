@@ -3,6 +3,19 @@
 All notable changes to this project are documented here. This project follows
 [Semantic Versioning](https://semver.org/).
 
+## [0.1.2] — 2026-08-31
+
+### Fixed
+- The "not configured yet" notice told users to run `kemory login` without
+  saying how to obtain the CLI, so a new user's first contact with the plugin
+  was a `command not found`. It now names the install command.
+- `plugin/README.md` linked to a `#install` anchor that no longer existed.
+- Stale header comment in `capture.sh` referencing the removed
+  `TaskCompleted` hook.
+
+### Added
+- `NOTICE`, and the copyright holder filled into the Apache appendix.
+
 ## [0.1.1] — 2026-08-31
 
 ### Fixed

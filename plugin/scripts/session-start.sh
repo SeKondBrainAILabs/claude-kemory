@@ -26,7 +26,7 @@ emit_setup_hint() {
   fi
   mkdir -p "$(dirname "$stamp")" 2>/dev/null && touch "$stamp" 2>/dev/null
   # shellcheck disable=SC2016  # backticks are markdown, not expansion
-  printf '%s\n' '{"systemMessage":"Kemory plugin: no memory backend configured yet. Run `kemory login`, or set KEMORY_URL with KEMORY_TOKEN (hosted) or KEMORY_API_KEY (self-hosted). Set KEMORY_QUIET_SETUP=1 to silence this."}'
+  printf '%s\n' '{"systemMessage":"Kemory plugin: no memory backend configured yet. Install the CLI with `brew install sekondbrainailabs/s9n/kemory` then run `kemory login` (browser sign-in). Already have a key? Export KEMORY_API_KEY instead. Silence this with KEMORY_QUIET_SETUP=1."}'
   exit 0
 }
 

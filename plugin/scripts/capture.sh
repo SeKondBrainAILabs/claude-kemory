@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# SessionEnd / TaskCompleted hook — capture a bounded digest of the session
-# into kemory as an episodic memory, tagged with session_id so the server-side
-# Reflector can consolidate episodes into a semantic summary later.
+# SessionEnd hook — capture a bounded digest of the session into Kemory as an
+# episodic memory, tagged with session_id so the server-side Reflector can
+# consolidate episodes into a semantic summary later.
 #
-# OPT-IN. Capture uploads conversation content to your kemory instance, so it
+# OPT-IN. Capture uploads conversation content to your Kemory instance, so it
 # stays off until you explicitly set KEMORY_AUTO_CAPTURE=1.
 #
 # Best-effort by design: any failure exits 0 so a session is never blocked.

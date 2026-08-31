@@ -267,6 +267,14 @@ class HookTest(unittest.TestCase):
         second = self.run_script("session-start.sh", {}, KEMORY_URL="")
         self.assertEqual(second.stdout.strip(), "", "must not nag every session")
 
+    def test_setup_hint_names_an_installable_command(self):
+        # A new user has no CLI, so telling them to run `kemory login` alone is
+        # a dead end — the hint must say how to get it.
+        r = self.run_script("session-start.sh", {}, KEMORY_URL="")
+        msg = json.loads(r.stdout)["systemMessage"]
+        self.assertIn("brew install", msg)
+        self.assertIn("kemory login", msg)
+
     def test_setup_hint_suppressed_by_flag(self):
         r = self.run_script("session-start.sh", {}, KEMORY_URL="", KEMORY_QUIET_SETUP="1")
         self.assertEqual(r.stdout.strip(), "")
