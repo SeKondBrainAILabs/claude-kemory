@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "kemory": {
+      "command": "kemory",
+      "args": ["mcp", "serve"],
+      "env": {}
+    }
+  }
+}
