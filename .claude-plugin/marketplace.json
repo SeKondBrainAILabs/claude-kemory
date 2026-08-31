@@ -1,11 +1,11 @@
 {
-  "name": "kemory-plugins",
+  "name": "kemory",
   "owner": {
     "name": "SeKondBrain",
     "url": "https://github.com/SeKondBrainAILabs"
   },
   "metadata": {
-    "description": "Official Kemory plugins for Claude Code"
+    "description": "Official Kemory plugin for Claude Code"
   },
   "plugins": [
     {

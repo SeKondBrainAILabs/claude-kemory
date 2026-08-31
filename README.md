@@ -1,12 +1,13 @@
-# Kemory plugin for Claude Code
+# claude-kemory
 
-Persistent, cross-session memory for Claude Code via
+Persistent, cross-session memory for Claude Code, powered by
 [Kemory](https://github.com/SeKondBrainAILabs/kemory-community). Works with
-hosted Kemory and the open-source community edition (same wire protocol).
+hosted Kemory and the open-source community edition — same wire protocol.
 
 An MCP server gives an agent memory *tools*. This plugin makes it actually
-use them well: rate what it recalls so retrieval improves, consolidate before
-context is lost, and optionally capture what a session was about.
+use them: your context is injected at session start, recalls get rated so
+retrieval improves instead of decaying, and durable facts get stored before
+they are lost to compaction.
 
 ## Quickstart
 
@@ -33,11 +34,11 @@ export KEMORY_API_KEY=kemory-community-ci-key
 **2. Install the plugin.**
 
 ```
-/plugin marketplace add SeKondBrainAILabs/kemory-plugins
+/plugin marketplace add SeKondBrainAILabs/claude-kemory
 ```
 
 ```
-/plugin install kemory@kemory-plugins
+/plugin install kemory@kemory
 ```
 
 **3. Start a session.** Your namespace summaries are injected automatically.
@@ -83,12 +84,12 @@ secret patterns redacted. See [plugin/README.md](plugin/README.md) for all
 configuration and [SECURITY.md](SECURITY.md) for what redaction does and
 does not guarantee.
 
-## Other platforms
+## Other agents
 
-Claude Code only for now. Cursor and Codex have plugin systems with hooks,
-but this plugin has not been tested against them — the hook payloads, MCP
-tool naming, and plugin-root variables differ, so support will be claimed
-once it is verified rather than assumed.
+This repo is the **Claude Code** integration. Cursor and Codex have plugin
+systems with hooks and would each get their own repo, but neither is built or
+tested yet — the hook payloads, MCP tool naming, and plugin-root variables
+differ, so support will be claimed once verified rather than assumed.
 
 Connector-only platforms (ChatGPT, Gemini, Perplexity) have no client-side
 plugin or hook system at all; correct usage there is carried by the Kemory

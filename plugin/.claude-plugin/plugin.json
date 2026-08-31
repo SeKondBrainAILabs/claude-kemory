@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "author": {
     "name": "SeKondBrain",
-    "url": "https://github.com/SeKondBrainAILabs/kemory-plugins"
+    "url": "https://github.com/SeKondBrainAILabs/claude-kemory"
   },
-  "homepage": "https://github.com/SeKondBrainAILabs/kemory-plugins",
+  "homepage": "https://github.com/SeKondBrainAILabs/claude-kemory",
   "license": "Apache-2.0",
   "keywords": [
     "memory",
