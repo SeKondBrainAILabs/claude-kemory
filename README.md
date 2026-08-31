@@ -41,8 +41,16 @@ export KEMORY_API_KEY=kemory-community-ci-key
 /plugin install kemory@kemory
 ```
 
-**3. Start a session.** Your namespace summaries are injected automatically.
-If Kemory is not reachable, the plugin tells you once what to fix.
+**3. Check it works.**
+
+```
+/kemory:status
+```
+
+Reports whether your credentials resolve, whether the API accepts them, and
+how capture and context injection are configured. Start a session and your
+namespace summaries are injected automatically; if Kemory is not reachable,
+the plugin also tells you once what to fix.
 
 ## What it does
 
@@ -53,8 +61,9 @@ If Kemory is not reachable, the plugin tells you once what to fix.
 | consolidate reminder | `PreCompact` | Prompts the agent to store durable facts before context is summarised away |
 | session capture | `SessionEnd` | **Opt-in.** Stores a bounded, redacted digest of what the session was about |
 
-Plus a `kemory` skill covering how to recall, rate, store, and phrase
-memories so semantic search can find them again.
+Plus `/kemory:status` for checking your setup, and a `kemory` skill covering
+how to recall, rate, store, and phrase memories so semantic search can find
+them again.
 
 ## Connecting Kemory
 

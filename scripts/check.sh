@@ -26,6 +26,22 @@ while IFS= read -r f; do
   fi
 done < <(find . -name '*.sh' -not -path './.git/*')
 
+if command -v claude >/dev/null 2>&1; then
+  echo "→ official manifest validation"
+  if claude plugin validate . >/dev/null 2>&1; then
+    echo "  ok   marketplace manifest"
+  else
+    echo "  FAIL marketplace manifest"; fail=1
+  fi
+  if claude plugin validate ./plugin >/dev/null 2>&1; then
+    echo "  ok   plugin manifest"
+  else
+    echo "  FAIL plugin manifest"; fail=1
+  fi
+else
+  echo "→ official manifest validation (skipped: claude CLI not on PATH)"
+fi
+
 echo "→ plugin source paths resolve"
 while IFS= read -r m; do
   p=$(jq -r '.plugins[0].source | if type=="string" then . else .path end' "$m")

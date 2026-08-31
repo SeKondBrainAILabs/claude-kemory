@@ -8,6 +8,8 @@ All notable changes to this project are documented here. This project follows
 Initial release. Claude Code only.
 
 ### Added
+- `/kemory:status` slash command reporting credential, API, capture, and
+  context-injection state, so users can tell whether the plugin is working.
 - Client-side capture de-duplication: identical session digests are written
   once per session, since `SessionEnd` fires on exit, `/clear`, and resume.
 - `SessionStart` hook that injects your Kemory namespace summaries into a new

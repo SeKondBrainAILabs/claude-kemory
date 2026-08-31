@@ -11,8 +11,13 @@ Hooks and a skill that make Claude Code use Kemory memory well.
 | inline | `PreCompact` | Reminds the agent to consolidate before context is summarised away |
 | `capture.sh` | `SessionEnd` | **Opt-in.** Stores a bounded, redacted digest of the session as an episodic memory |
 
-Plus a `kemory` skill covering how to recall, rate, store, and phrase memories
-so semantic search can find them again.
+Plus:
+
+- **`/kemory:status`** — reports whether credentials resolve, whether the API
+  accepts them, whether the CLI is on PATH, and how capture and context
+  injection are configured. Run this first when something looks wrong.
+- a **`kemory` skill** covering how to recall, rate, store, and phrase
+  memories so semantic search can find them again.
 
 ## Install
 

@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# Report whether Kemory is actually working: credentials, API reachability,
+# capture state, and local capture history. Read-only and safe to run anytime.
+set -uo pipefail
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib.sh disable=SC1091
+. "$DIR/lib.sh"
+
+ok()   { printf '  \033[32m✔\033[0m %s\n' "$1"; }
+bad()  { printf '  \033[31m✘\033[0m %s\n' "$1"; }
+info() { printf '  \033[2m·\033[0m %s\n' "$1"; }
+
+echo "Kemory status"
+echo
+
+# --- credentials -----------------------------------------------------------
+if kemory_resolve_auth; then
+  case "$KEMORY_AUTH_HEADER" in
+    X-API-Key:*)      mode="X-API-Key (community edition)" ;;
+    Authorization:*)  mode="Bearer token (hosted)" ;;
+    *)                mode="unknown" ;;
+  esac
+  ok "credentials resolved — $mode"
+  info "endpoint: $KEMORY_BASE_URL"
+else
+  bad "no credentials"
+  info "run 'kemory login', or set KEMORY_URL with KEMORY_TOKEN (hosted) or KEMORY_API_KEY (self-hosted)"
+fi
+
+# --- API reachability ------------------------------------------------------
+if [ -n "${KEMORY_BASE_URL:-}" ] && command -v curl >/dev/null 2>&1; then
+  code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 6 \
+          -H "$KEMORY_AUTH_HEADER" "$KEMORY_BASE_URL/api/v1/namespaces" 2>/dev/null || echo 000)"
+  case "$code" in
+    200)      ok  "API reachable and credentials accepted (HTTP 200)" ;;
+    401|403)  bad "API reachable but rejected the credentials (HTTP $code)" ;;
+    000)      bad "API unreachable — wrong URL, or the server is down" ;;
+    *)        bad "API returned HTTP $code" ;;
+  esac
+fi
+
+# --- CLI / MCP -------------------------------------------------------------
+if command -v kemory >/dev/null 2>&1; then
+  ok "kemory CLI on PATH — the bundled MCP server can start"
+else
+  info "kemory CLI not on PATH; the bundled MCP server will not start"
+  info "that is fine if you connect via the hosted connector or a remote MCP endpoint"
+fi
+info "run /mcp to confirm which kemory server Claude is actually talking to"
+
+# --- capture ---------------------------------------------------------------
+echo
+if [ "${KEMORY_AUTO_CAPTURE:-0}" = "1" ]; then
+  ok "session capture ENABLED — digests of your prompts are uploaded at session end"
+  info "namespace: ${KEMORY_CAPTURE_NAMESPACE:-shared}, last ${KEMORY_CAPTURE_MAX_TURNS:-12} turns"
+else
+  info "session capture disabled (default) — set KEMORY_AUTO_CAPTURE=1 to enable"
+fi
+n=$(find "$HOME/.kemory/.captured" -type f 2>/dev/null | wc -l | tr -d ' ')
+[ "${n:-0}" -gt 0 ] && info "$n session(s) captured so far"
+
+# --- context injection -----------------------------------------------------
+if [ "${KEMORY_CONTEXT:-1}" = "1" ]; then
+  info "context injection on (budget ${KEMORY_CONTEXT_MAX_CHARS:-4000} chars, depth ${KEMORY_CONTEXT_DEPTH:-l3})"
+else
+  info "context injection disabled via KEMORY_CONTEXT=0"
+fi
+exit 0
