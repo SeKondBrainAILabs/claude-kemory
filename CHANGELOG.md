@@ -8,8 +8,9 @@ All notable changes to this project are documented here. This project follows
 Initial release. Claude Code only.
 
 ### Added
-- Bundled MCP server uses the hosted HTTP endpoint with `KEMORY_API_KEY`, so
-  no CLI or local process is needed.
+- Bundled MCP server runs the Kemory CLI's stdio bridge, so a single
+  `kemory login` (OAuth browser sign-in) covers both the memory tools and the
+  credentials the hooks need — no keys to copy or paste.
 - 17 behavioural tests driving the real hook scripts, run by CI.
 - `/kemory:status` slash command reporting credential, API, capture, and
   context-injection state, so users can tell whether the plugin is working.

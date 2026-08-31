@@ -12,7 +12,21 @@ they are lost to compaction.
 
 ## Quickstart
 
-**1. Install the plugin.**
+**1. Install the Kemory CLI and sign in.**
+
+```bash
+brew install sekondbrainailabs/s9n/kemory
+```
+
+```bash
+kemory login
+```
+
+Browser sign-in (OAuth 2.0 device flow) — no keys to copy or paste. This one
+login gives the plugin everything it needs: the MCP bridge for memory tools,
+and credentials the hooks read to inject your context and store facts.
+
+**2. Install the plugin.**
 
 ```
 /plugin marketplace add SeKondBrainAILabs/claude-kemory
@@ -22,50 +36,47 @@ they are lost to compaction.
 /plugin install kemory@kemory
 ```
 
-**2. Add your key** from [kemory.sekondbrain.ai](https://kemory.sekondbrain.ai):
-
-```bash
-export KEMORY_API_KEY="..."
-```
-
 **3. Confirm it works.**
 
 ```
 /kemory:status
 ```
 
-That is the whole setup. From the next session your namespace summaries are
-injected automatically, and recalls get rated so retrieval keeps improving.
+From the next session your namespace summaries are injected automatically,
+and recalls get rated so retrieval keeps improving.
 
 <details>
-<summary>Other ways to connect</summary>
+<summary>Connecting without the CLI</summary>
 
-The plugin's bundled MCP server talks to hosted Kemory over HTTP using
-`KEMORY_API_KEY`, so the quickstart above needs no CLI and no local process.
-Other setups:
+**Already using the Kemory connector?** Adding *Kemory by SeKondBrain* in your
+claude.ai connector settings gives you the memory tools over OAuth, everywhere
+— web, mobile, desktop and Claude Code. Disable this plugin's bundled MCP
+server so you do not run two: two servers means two copies of the same 28
+tools in every request, and `/mcp` shows what is connected.
 
-- **Kemory CLI** — `kemory login` stores credentials the hooks read
-  automatically. Disable the bundled MCP server and run
-  `kemory mcp install --host claude-code` instead.
-- **Hosted connector** — add Kemory in your claude.ai connector settings, and
-  disable the bundled MCP server so you do not run two.
-- **Self-hosted / community edition** — run the stack, then point at it:
+The hooks are separate from MCP — they call the API directly, so they need
+their own credential. Without one they no-op silently, and you get the tools
+and skill but no context injection and no capture. To enable them alongside
+the connector, set a key from
+[kemory.sekondbrain.ai](https://kemory.sekondbrain.ai):
 
-  ```bash
-  git clone https://github.com/SeKondBrainAILabs/kemory-community.git
-  cd kemory-community && docker compose -f docker-compose.community.yml up -d --build
-  export KEMORY_URL=http://127.0.0.1:8111
-  export KEMORY_API_KEY=kemory-community-ci-key
-  ```
+```bash
+export KEMORY_API_KEY="..."
+```
 
-`KEMORY_URL` defaults to the hosted API and only needs setting when you point
-elsewhere. Note it steers the **hooks**; the bundled MCP server's URL is fixed
-at hosted, so a self-hosted setup should disable it and configure its own.
-Run `/kemory:status` after any of these to confirm.
+**Self-hosted / community edition:**
 
-**Already have a Kemory MCP server?** Disable this plugin's — two servers
-means two copies of the same 28 tools in every request. `/mcp` shows what is
-connected.
+```bash
+git clone https://github.com/SeKondBrainAILabs/kemory-community.git
+cd kemory-community && docker compose -f docker-compose.community.yml up -d --build
+export KEMORY_URL=http://127.0.0.1:8111
+export KEMORY_API_KEY=kemory-community-ci-key
+```
+
+`kemory login --local` skips OAuth and stores a machine-local API key for
+this case. `KEMORY_URL` defaults to hosted Kemory and steers the **hooks**;
+the bundled MCP server runs the CLI, so point that at your instance with
+`kemory --env local login` or configure your own MCP entry.
 
 </details>
 

@@ -24,7 +24,7 @@ if kemory_resolve_auth; then
   info "endpoint: $KEMORY_BASE_URL"
 else
   bad "no credentials"
-  info "set KEMORY_API_KEY with a key from https://kemory.sekondbrain.ai, or run 'kemory login'"
+  info "run 'kemory login' (browser sign-in), or set KEMORY_API_KEY for a keyed setup"
 fi
 
 # --- API reachability ------------------------------------------------------
@@ -44,7 +44,8 @@ if command -v kemory >/dev/null 2>&1; then
   ok "kemory CLI on PATH — the bundled MCP server can start"
 else
   info "kemory CLI not on PATH; the bundled MCP server will not start"
-  info "that is fine if you connect via the hosted connector or a remote MCP endpoint"
+  info "install it with 'brew install sekondbrainailabs/s9n/kemory', or use the"
+  info "Kemory connector for tools and disable the bundled server"
 fi
 info "run /mcp to confirm which kemory server Claude is actually talking to"
 

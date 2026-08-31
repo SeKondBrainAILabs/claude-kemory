@@ -1,9 +1,7 @@
 {
   "kemory": {
-    "type": "http",
-    "url": "https://api.kemory.sekondbrain.ai/mcp/v1",
-    "headers": {
-      "X-API-Key": "${KEMORY_API_KEY}"
-    }
+    "command": "kemory",
+    "args": ["mcp", "serve"],
+    "env": {}
   }
 }

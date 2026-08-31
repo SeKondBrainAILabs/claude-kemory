@@ -73,8 +73,10 @@ export KEMORY_AUTO_CAPTURE=1
 All hooks that reach the API share one credential resolver
 (`scripts/lib.sh`): the CLI's `~/.kemory/credentials` if present, otherwise
 `KEMORY_API_KEY` or `KEMORY_TOKEN`, against `KEMORY_URL` (defaulting to
-hosted Kemory). The API accepts either credential style. With none of
-those, every hook stays silent.
+hosted Kemory). `kemory login` is the recommended route — OAuth browser
+sign-in, nothing to paste, and it writes the credentials the hooks read. The
+API accepts either credential style. With none of those, every hook stays
+silent.
 
 What is captured: your own turns only (assistant replies and tool output are
 skipped), capped at the last N turns and 8000 characters, with common secret
