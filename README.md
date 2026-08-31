@@ -40,13 +40,15 @@ injected automatically, and recalls get rated so retrieval keeps improving.
 <details>
 <summary>Other ways to connect</summary>
 
-The plugin never requires the CLI — it only needs a reachable Kemory and a
-credential. Pick whichever suits you:
+The plugin's bundled MCP server talks to hosted Kemory over HTTP using
+`KEMORY_API_KEY`, so the quickstart above needs no CLI and no local process.
+Other setups:
 
-- **Kemory CLI** — `kemory login` stores credentials the plugin reads
-  automatically, and the plugin's bundled MCP server runs `kemory mcp serve`.
-- **Hosted connector** — add Kemory in your claude.ai connector settings.
-  Disable the plugin's bundled MCP server so you do not run two.
+- **Kemory CLI** — `kemory login` stores credentials the hooks read
+  automatically. Disable the bundled MCP server and run
+  `kemory mcp install --host claude-code` instead.
+- **Hosted connector** — add Kemory in your claude.ai connector settings, and
+  disable the bundled MCP server so you do not run two.
 - **Self-hosted / community edition** — run the stack, then point at it:
 
   ```bash
@@ -56,8 +58,14 @@ credential. Pick whichever suits you:
   export KEMORY_API_KEY=kemory-community-ci-key
   ```
 
-`KEMORY_URL` defaults to the hosted API, so you only set it when pointing
-somewhere else. Run `/kemory:status` after any of these to confirm.
+`KEMORY_URL` defaults to the hosted API and only needs setting when you point
+elsewhere. Note it steers the **hooks**; the bundled MCP server's URL is fixed
+at hosted, so a self-hosted setup should disable it and configure its own.
+Run `/kemory:status` after any of these to confirm.
+
+**Already have a Kemory MCP server?** Disable this plugin's — two servers
+means two copies of the same 28 tools in every request. `/mcp` shows what is
+connected.
 
 </details>
 
