@@ -14,7 +14,7 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "mcp__.*__kemory_recall_memory|mcp__.*__kemory_get_context",
+        "matcher": "mcp__.*__kemory_(recall.*|ask|memory|find_similar|get_.*)",
         "hooks": [
           {
             "type": "command",

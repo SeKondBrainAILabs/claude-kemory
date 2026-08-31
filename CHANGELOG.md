@@ -8,6 +8,10 @@ All notable changes to this project are documented here. This project follows
 Initial release. Claude Code only.
 
 ### Added
+- Rate reminder now covers the whole recall family (`kemory_recall`,
+  `kemory_ask`, `kemory_memory`, `kemory_find_similar`, `kemory_get_*`), not
+  just `kemory_recall_memory` and `kemory_get_context`. It gates on a
+  `recall_id` or a non-empty result list, so write calls never trigger it.
 - Bundled MCP server runs the Kemory CLI's stdio bridge, so a single
   `kemory login` (OAuth browser sign-in) covers both the memory tools and the
   credentials the hooks need — no keys to copy or paste.

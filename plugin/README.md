@@ -7,7 +7,7 @@ Hooks and a skill that make Claude Code use Kemory memory well.
 | Hook | Event | Behaviour |
 |------|-------|-----------|
 | `session-start.sh` | `SessionStart` | Injects your Kemory namespace summaries so the session starts informed, and warns once if Kemory isn't configured yet |
-| `rate-reminder.sh` | `PostToolUse` on kemory recall tools | Reminds the agent to rate memories it actually used, so recall quality improves over time |
+| `rate-reminder.sh` | `PostToolUse` on any Kemory recall tool | Reminds the agent to rate memories it actually used, so recall quality improves over time. Fires only when the response is rateable — it carries a `recall_id` or a non-empty result list |
 | inline | `PreCompact` | Reminds the agent to consolidate before context is summarised away |
 | `capture.sh` | `SessionEnd` | **Opt-in.** Stores a bounded, redacted digest of the session as an episodic memory |
 

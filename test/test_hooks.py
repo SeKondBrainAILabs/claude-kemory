@@ -183,13 +183,51 @@ class HookTest(unittest.TestCase):
                             {"tool_response": {"memories": [1, 2, 3],
                                                "retrieval": {"recall_id": "rc_x"}}})
         ctx = json.loads(r.stdout)["hookSpecificOutput"]["additionalContext"]
-        self.assertIn("3 memory", ctx)
+        self.assertIn("3 memories", ctx)
         self.assertIn("rc_x", ctx)
 
-    def test_reminder_fails_open_on_unparseable_input(self):
+    def test_reminder_silent_on_unparseable_input(self):
+        # Fail CLOSED, not open: the matcher covers the whole kemory_* recall
+        # family, so an unparseable non-recall response must not produce a
+        # reminder to rate memories that were never recalled.
         r = subprocess.run([str(SCRIPTS / "rate-reminder.sh")], input="not json",
                            text=True, capture_output=True, env=self.env())
-        self.assertIn("hookSpecificOutput", r.stdout)
+        self.assertEqual(r.stdout.strip(), "")
+
+    def test_reminder_fires_for_recall_alias_shape(self):
+        # kemory_recall is a documented alias of kemory_recall_memory and
+        # returns the same envelope; it must be reminded on too.
+        r = self.run_script("rate-reminder.sh",
+                            {"tool_response": {"total": 2, "showing": 2,
+                                               "memories": [1, 2],
+                                               "retrieval": {"recall_id": "rc_alias"}}})
+        ctx = json.loads(r.stdout)["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("2 memories", ctx)
+        self.assertIn("rc_alias", ctx)
+
+    def test_reminder_fires_on_recall_id_without_list(self):
+        r = self.run_script("rate-reminder.sh",
+                            {"tool_response": {"retrieval": {"recall_id": "rc_only"}}})
+        self.assertIn("rc_only", r.stdout)
+
+    def test_reminder_silent_for_non_recall_response(self):
+        # A store/write response carries no recall_id and no result list.
+        r = self.run_script("rate-reminder.sh",
+                            {"tool_response": {"memory_id": "m", "namespace": "shared",
+                                               "version": 1}})
+        self.assertEqual(r.stdout.strip(), "")
+
+    def test_hook_matcher_covers_recall_family(self):
+        import re
+        hooks = json.loads((ROOT / "plugin" / "hooks" / "hooks.json").read_text())
+        matcher = hooks["hooks"]["PostToolUse"][0]["matcher"]
+        rx = re.compile(matcher)
+        for tool in ("recall", "recall_memory", "get_context", "ask", "memory",
+                     "find_similar", "get_compressed", "get_raw",
+                     "get_session_context", "get_namespace_summary"):
+            name = f"mcp__plugin_kemory_kemory__kemory_{tool}"
+            with self.subTest(tool=tool):
+                self.assertTrue(rx.match(name), f"{tool} not covered by matcher")
 
     # --- session start ----------------------------------------------------
     def test_session_start_injects_summaries(self):
