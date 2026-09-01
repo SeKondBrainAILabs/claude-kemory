@@ -34,6 +34,32 @@ connect through the hosted claude.ai connector or a remote MCP endpoint
 
 If no Kemory server is connected, every hook no-ops rather than erroring.
 
+### Two credentials, not one
+
+The MCP tools and the hooks authenticate **separately**, which is the single
+most common source of confusion:
+
+| You have | Tools | Hooks |
+|----------|-------|-------|
+| `kemory login` (CLI) | yes | yes |
+| Connector or remote MCP, nothing else | yes | **no** |
+| Connector or remote MCP, plus `KEMORY_API_KEY` in your environment | yes | yes |
+| A key inside an MCP config file | yes | **no** — the hooks never read MCP config |
+
+That last row is worth stating twice: a key in `.mcp.json` or `~/.claude.json`
+authenticates the *tools* and is invisible to the *hooks*. `/kemory:status`
+detects that case and tells you; export the same key as `KEMORY_API_KEY` to
+turn the hooks on.
+
+Stored OAuth tokens are refreshed automatically when they expire. If a refresh
+fails, `/kemory:status` says so rather than leaving the hooks quietly rejected.
+
+### Platform support
+
+macOS and Linux, arm64 and x64. The hooks are `bash` scripts calling `curl` and
+`python3`. There is no Windows CLI build; Windows would need Git Bash or WSL
+and is untested, so it is not claimed.
+
 ## Session context injection
 
 On every session start the plugin fetches your namespace summaries and injects

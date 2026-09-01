@@ -13,6 +13,11 @@ info() { printf '  \033[2m·\033[0m %s\n' "$1"; }
 echo "Kemory status"
 echo
 
+# Kemory has two independent halves and they authenticate separately: the MCP
+# tools, and the hooks. Reporting one number for both is how a user ends up
+# believing the plugin works when half of it is inert.
+echo "HOOKS — context injection, prompt recall, rating, capture"
+
 # --- credentials -----------------------------------------------------------
 if kemory_resolve_auth; then
   case "$KEMORY_AUTH_HEADER" in
@@ -33,9 +38,19 @@ if kemory_resolve_auth; then
       info "it is stored in your credentials file — re-run 'kemory login'"
     fi
   fi
+  if [ "${KEMORY_TOKEN_EXPIRED:-0}" = "1" ]; then
+    bad "the stored token is expired and could not be refreshed"
+    info "run 'kemory login' again — until then every hook will be rejected"
+  fi
 else
-  bad "no credentials"
-  info "run 'kemory login' (browser sign-in), or set KEMORY_API_KEY for a keyed setup"
+  bad "no credential the hooks can use — every hook is inert"
+  mcp_key="$(kemory_find_mcp_config_key)"
+  if [ -n "$mcp_key" ]; then
+    info "found an API key in $mcp_key, which the hooks cannot read"
+    info "export that same key as KEMORY_API_KEY to turn the hooks on"
+  else
+    info "run 'kemory login' (browser sign-in), or set KEMORY_API_KEY"
+  fi
 fi
 
 # --- API reachability ------------------------------------------------------
@@ -56,18 +71,21 @@ if [ -n "${KEMORY_BASE_URL:-}" ] && command -v curl >/dev/null 2>&1; then
   esac
 fi
 
-# --- CLI / MCP -------------------------------------------------------------
+# --- MCP tools -------------------------------------------------------------
+echo
+echo "TOOLS — the kemory_* MCP tools (a separate credential from the hooks)"
 if command -v kemory >/dev/null 2>&1; then
   ok "kemory CLI on PATH — the bundled MCP server can start"
 else
-  info "kemory CLI not on PATH; the bundled MCP server will not start"
-  info "install it with 'brew install sekondbrainailabs/s9n/kemory', or use the"
-  info "Kemory connector for tools and disable the bundled server"
+  info "kemory CLI not on PATH, so the bundled MCP server will not start"
+  info "that is fine if you connect another way — the Kemory connector, or a"
+  info "custom connector at https://api.kemory.s9n.ai/mcp/v1"
 fi
 info "run /mcp to confirm which kemory server Claude is actually talking to"
 
 # --- capture ---------------------------------------------------------------
 echo
+echo "SETTINGS"
 if [ "${KEMORY_AUTO_CAPTURE:-0}" = "1" ]; then
   ok "session capture ENABLED — digests of your prompts are uploaded at session end"
   info "namespace: ${KEMORY_CAPTURE_NAMESPACE:-shared}, last ${KEMORY_CAPTURE_MAX_TURNS:-12} turns"

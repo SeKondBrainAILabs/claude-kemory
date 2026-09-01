@@ -12,33 +12,7 @@ they are lost to compaction.
 
 ## Quickstart
 
-**1. Give the plugin a credential.** Either route works; the hooks and the
-bundled MCP server read both.
-
-*With the CLI* — browser sign-in, no keys to copy or paste. One login covers
-both the MCP bridge and the hooks:
-
-```bash
-brew install sekondbrainailabs/s9n/kemory
-```
-
-```bash
-kemory login
-```
-
-*Without the CLI* — if you already use the Kemory connector, or you are on
-self-hosted or the community edition, set a key instead. The connector gives
-you the tools but not the hooks, which authenticate separately:
-
-```bash
-export KEMORY_API_KEY="..."   # from kemory.sekondbrain.ai
-```
-
-See [Connecting without the CLI](#connecting-without-the-cli) below for the
-connector and self-hosted details, including which MCP server to disable so you
-are not running two.
-
-**2. Install the plugin.**
+**1. Install the plugin.**
 
 ```
 /plugin marketplace add SeKondBrainAILabs/claude-kemory
@@ -48,6 +22,61 @@ are not running two.
 /plugin install kemory@kemory
 ```
 
+**2. Give it a credential.** Kemory has two halves that authenticate
+*separately*: the `kemory_*` MCP **tools**, and the **hooks** that make the
+agent actually use them.
+
+*With the CLI* — one browser sign-in covers both:
+
+```bash
+kemory login
+```
+
+No keys to copy or paste. See
+[Getting the CLI](#getting-the-cli-with-or-without-homebrew) — Homebrew is one
+option, not a requirement.
+
+*Without the CLI* — if you already reach Kemory through the connector, a custom
+MCP endpoint, or self-hosted, you have the tools; give the hooks a key of their
+own:
+
+```bash
+export KEMORY_API_KEY="..."   # from kemory.sekondbrain.ai
+```
+
+It must be an environment variable. **A key inside an MCP config file
+authenticates the tools and is invisible to the hooks** — the most common way
+to end up with working tools and nothing else. `/kemory:status` detects that
+case and says so.
+
+
+```
+/plugin marketplace add SeKondBrainAILabs/claude-kemory
+```
+
+```
+/plugin install kemory@kemory
+```
+
+**2. Give it a credential.**
+
+Kemory has two halves that authenticate separately: the `kemory_*` MCP
+**tools**, and the **hooks** that make the agent use them. One sign-in covers
+both:
+
+```bash
+kemory login
+```
+
+Browser sign-in (OAuth 2.0 device flow) — no keys to copy or paste.
+
+Don't have the CLI? You don't need it. If you already reach Kemory through the
+connector or a custom MCP endpoint, you have the tools; give the hooks a key of
+their own with `export KEMORY_API_KEY="..."`. See
+[Connecting without the CLI](#connecting-without-the-cli) — and note that a key
+placed in an MCP config file is *not* visible to the hooks, which is the most
+common way to end up with working tools and inert hooks.
+
 **3. Confirm it works.**
 
 ```
@@ -56,6 +85,30 @@ are not running two.
 
 From the next session your namespace summaries are injected automatically,
 and recalls get rated so retrieval keeps improving.
+
+<details>
+<summary>Getting the CLI, with or without Homebrew</summary>
+
+Homebrew is a convenience, not a requirement — the tap wraps four prebuilt
+tarballs published on a GitHub release:
+
+```bash
+brew install sekondbrainailabs/s9n/kemory
+```
+
+Without Homebrew, take the binary directly. Replace the platform with one of
+`macos-arm64`, `macos-x64`, `linux-arm64`, `linux-x64`:
+
+```bash
+curl -fsSL https://github.com/SeKondBrainAILabs/homebrew-s9n/releases/latest/download/kemory-macos-arm64.tar.gz \
+  | tar -xz -C ~/.local/bin
+```
+
+**Supported platforms.** macOS and Linux, on arm64 and x64. **There is no
+Windows build**, and the hooks are `bash` scripts calling `curl` and `python3`,
+so Windows would need Git Bash or WSL — untested, and not currently claimed.
+
+</details>
 
 <details id="connecting-without-the-cli">
 <summary>Connecting without the CLI</summary>

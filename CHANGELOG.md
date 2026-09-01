@@ -3,6 +3,42 @@
 All notable changes to this project are documented here. This project follows
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.4] — 2026-09-01
+
+Four ways a user could believe the plugin was working while the hooks were
+inert, and one install story that excluded people for no reason.
+
+### Fixed
+- **Expired tokens are now refreshed.** The credential file has carried
+  `expires_at` and `refresh_token` all along, but `lib.sh` read `access_token`
+  and nothing else — so once it expired, every hook 401'd and no-op'd with no
+  notice at all, because the setup hint only fires when no credential file
+  exists and a stale one does. Refresh is best-effort against the stored
+  issuer, written back atomically at `0600`. A refresh that fails is reported
+  as expired rather than silently retried forever.
+- **The setup notice no longer claims nothing is configured.** It said "no
+  memory backend configured yet" and pointed at `brew install` — wrong, and
+  actively misleading, for anyone whose MCP tools were already working through
+  a connector. It now says the *hooks* have no credential, notes the tools
+  authenticate separately, and names both remedies.
+- **A key in an MCP config is detected and explained.** Our own docs tell
+  Claude Code users to put the API key in an `X-API-Key` header inside the MCP
+  config file — where the hooks cannot see it, since they read the environment
+  or the CLI credential file. The most likely path to working tools and inert
+  hooks. `/kemory:status` and the setup notice now name the file and say to
+  export the same key. Detection only: the key itself is never read out or
+  echoed, because harvesting a credential from another tool's config is not a
+  habit to build in.
+
+### Changed
+- **`/kemory:status` reports the two axes separately** — HOOKS and TOOLS — since
+  one combined verdict is how a user concludes the plugin works when half of it
+  is doing nothing.
+- **Homebrew is no longer the headline.** The tap wraps four prebuilt tarballs
+  on a GitHub release; the README now gives the direct `curl` for people
+  without Homebrew, and the plugin install comes first, before any credential
+  step. Supported platforms are stated for the first time: macOS and Linux on
+  arm64/x64, no Windows build, hooks needing `bash`/`curl`/`python3`.
 ## [0.2.3] — 2026-09-01
 
 ### Fixed

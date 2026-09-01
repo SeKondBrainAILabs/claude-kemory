@@ -13,6 +13,8 @@ import shutil
 import subprocess
 import tempfile
 import threading
+import time
+import urllib.parse
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -28,11 +30,26 @@ class Recorder(http.server.BaseHTTPRequestHandler):
     search_status: int = 200
     memories_status: int = 201
     get_status: int = 200
+    # Keycloak refresh response, and its status.
+    token_payload: dict = {"access_token": "fresh-token", "expires_in": 3600}
+    token_status: int = 200
 
     def do_POST(self):
         n = int(self.headers.get("Content-Length", 0))
-        body = json.loads(self.rfile.read(n) or b"{}")
+        raw = self.rfile.read(n)
+        try:
+            body = json.loads(raw or b"{}")
+        except ValueError:
+            # OAuth token requests are application/x-www-form-urlencoded.
+            body = {k: v[0] for k, v in
+                    urllib.parse.parse_qs(raw.decode("utf-8", "replace")).items()}
         Recorder.posts.append((self.headers, body, self.path))
+        if self.path.endswith("/protocol/openid-connect/token"):
+            self.send_response(Recorder.token_status)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps(Recorder.token_payload).encode())
+            return
         if self.path.endswith("/memories/search"):
             self.send_response(Recorder.search_status)
             self.send_header("Content-Type", "application/json")
@@ -75,6 +92,9 @@ class HookTest(unittest.TestCase):
         Recorder.search_status = 200
         Recorder.memories_status = 201
         Recorder.get_status = 200
+        Recorder.token_payload = {"access_token": "fresh-token",
+                                  "expires_in": 3600}
+        Recorder.token_status = 200
         self.home = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.home, ignore_errors=True)
 
@@ -406,7 +426,8 @@ class HookTest(unittest.TestCase):
         # a dead end — the hint must say how to get it.
         r = self.run_script("session-start.sh", {}, KEMORY_URL="")
         msg = json.loads(r.stdout)["systemMessage"]
-        self.assertIn("brew install", msg)
+        self.assertTrue("kemory login" in msg or "KEMORY_API_KEY" in msg,
+                        "the hint must name an action, not just a diagnosis")
         self.assertIn("kemory login", msg)
 
     def test_setup_hint_suppressed_by_flag(self):
@@ -817,6 +838,148 @@ class HookTest(unittest.TestCase):
         r = self.run_script("status.sh", {}, KEMORY_API_KEY="k")
         self.assertIn("HTTP 200", r.stdout)
         self.assertNotIn("not the API", r.stdout)
+
+class CredentialTest(unittest.TestCase):
+    """Token refresh and the two-credential story.
+
+    The hooks and the MCP tools authenticate separately. Every failure mode
+    here is one where the user believes the plugin is working.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.srv = http.server.HTTPServer(("127.0.0.1", 0), Recorder)
+        cls.port = cls.srv.server_address[1]
+        threading.Thread(target=cls.srv.serve_forever, daemon=True).start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.srv.shutdown()
+
+    def setUp(self):
+        Recorder.posts.clear()
+        Recorder.get_payload = {"namespaces": []}
+        Recorder.get_status = 200
+        Recorder.token_payload = {"access_token": "fresh-token",
+                                  "expires_in": 3600}
+        Recorder.token_status = 200
+        self.home = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.home, ignore_errors=True)
+
+    def write_creds(self, **over):
+        d = {"kemory_url": f"http://127.0.0.1:{self.port}",
+             "access_token": "stale-token",
+             "refresh_token": "refresh-me",
+             "client_id": "kemory-cli",
+             "issuer": f"http://127.0.0.1:{self.port}/realms/s9n",
+             "expires_at": 1.0}          # long expired
+        d.update(over)
+        p = pathlib.Path(self.home) / ".kemory"
+        p.mkdir(parents=True, exist_ok=True)
+        (p / "credentials-prod").write_text(json.dumps(d))
+        return p / "credentials-prod"
+
+    def resolve(self, **env):
+        """Source lib.sh, resolve auth, print what the hooks would send."""
+        e = {k: v for k, v in os.environ.items() if not k.startswith("KEMORY_")}
+        e["HOME"] = self.home
+        e.update(env)
+        script = (f'. "{SCRIPTS}/lib.sh"; kemory_resolve_auth'
+                  ' && echo "$KEMORY_AUTH_HEADER"'
+                  ' ; echo "expired=${KEMORY_TOKEN_EXPIRED:-0}"')
+        return subprocess.run(["bash", "-c", script], text=True,
+                              capture_output=True, env=e)
+
+    def test_expired_token_is_refreshed_and_persisted(self):
+        creds = self.write_creds()
+        out = self.resolve().stdout
+        self.assertIn("Bearer fresh-token", out,
+                      "an expired token must be exchanged, not sent as-is")
+        self.assertEqual(json.loads(creds.read_text())["access_token"],
+                         "fresh-token", "the refresh must be written back")
+        self.assertIn("expired=0", out)
+
+    def test_live_token_is_not_refreshed(self):
+        self.write_creds(expires_at=time.time() + 3600,
+                         access_token="still-good")
+        out = self.resolve().stdout
+        self.assertIn("Bearer still-good", out)
+        self.assertEqual(Recorder.posts, [], "no token call for a live token")
+
+    def test_failed_refresh_reports_expiry_rather_than_pretending(self):
+        Recorder.token_status = 500
+        self.write_creds()
+        out = self.resolve().stdout
+        self.assertIn("expired=1",
+                      out, "a dead token must be reported, not silently used")
+
+    def test_refresh_survives_a_credential_file_with_no_issuer(self):
+        # Pre-OAuth and community-edition files have no issuer or client_id.
+        self.write_creds(issuer="", client_id="")
+        out = self.resolve().stdout
+        self.assertIn("expired=1", out)
+        self.assertEqual(Recorder.posts, [])
+
+    def test_refreshed_credentials_are_not_world_readable(self):
+        creds = self.write_creds()
+        self.resolve()
+        self.assertEqual(oct(creds.stat().st_mode)[-3:], "600",
+                         "the file holds a bearer token")
+
+    # --- the key our own docs tell people to put in an MCP config ----------
+    def mcp_config(self, body):
+        p = pathlib.Path(self.home) / ".mcp.json"
+        p.write_text(json.dumps(body))
+        return p
+
+    def test_a_key_in_an_mcp_config_is_detected(self):
+        self.mcp_config({"mcpServers": {"kemory": {
+            "url": "https://api.kemory.s9n.ai/mcp/v1",
+            "headers": {"X-API-Key": "kemory_secret"}}}})
+        r = self.resolve(CLAUDE_PROJECT_DIR=self.home)
+        script = (f'. "{SCRIPTS}/lib.sh"; kemory_find_mcp_config_key')
+        e = {k: v for k, v in os.environ.items() if not k.startswith("KEMORY_")}
+        e.update({"HOME": self.home, "CLAUDE_PROJECT_DIR": self.home})
+        found = subprocess.run(["bash", "-c", script], text=True,
+                               capture_output=True, env=e).stdout
+        self.assertIn(".mcp.json", found)
+        self.assertNotIn("kemory_secret", found,
+                         "detect and tell — never surface the key itself")
+        del r
+
+    def test_unrelated_mcp_servers_are_not_reported(self):
+        self.mcp_config({"mcpServers": {"github": {
+            "url": "https://example.invalid",
+            "headers": {"X-API-Key": "not-ours"}}}})
+        script = f'. "{SCRIPTS}/lib.sh"; kemory_find_mcp_config_key'
+        e = {k: v for k, v in os.environ.items() if not k.startswith("KEMORY_")}
+        e.update({"HOME": self.home, "CLAUDE_PROJECT_DIR": self.home})
+        r = subprocess.run(["bash", "-c", script], text=True,
+                           capture_output=True, env=e)
+        self.assertEqual(r.stdout.strip(), "")
+
+    def test_setup_notice_never_claims_nothing_is_configured(self):
+        # The old wording sent connector users, whose tools were working, off
+        # to brew install. Whatever it says, it must not say that.
+        e = {k: v for k, v in os.environ.items() if not k.startswith("KEMORY_")}
+        e.update({"HOME": self.home, "CLAUDE_PROJECT_DIR": self.home})
+        r = subprocess.run([str(SCRIPTS / "session-start.sh")], input="{}",
+                           text=True, capture_output=True, env=e)
+        msg = json.loads(r.stdout)["systemMessage"]
+        self.assertNotIn("no memory backend", msg)
+        self.assertIn("hooks", msg)
+
+    def test_setup_notice_names_the_mcp_config_without_leaking_the_key(self):
+        self.mcp_config({"mcpServers": {"kemory": {
+            "headers": {"X-API-Key": "kemory_secret"}}}})
+        e = {k: v for k, v in os.environ.items() if not k.startswith("KEMORY_")}
+        e.update({"HOME": self.home, "CLAUDE_PROJECT_DIR": self.home})
+        r = subprocess.run([str(SCRIPTS / "session-start.sh")], input="{}",
+                           text=True, capture_output=True, env=e)
+        msg = json.loads(r.stdout)["systemMessage"]
+        self.assertIn(".mcp.json", msg)
+        self.assertNotIn("kemory_secret", msg)
+
 
 class FixtureCoverage(unittest.TestCase):
     """Every registered hook event must have a captured payload behind it.

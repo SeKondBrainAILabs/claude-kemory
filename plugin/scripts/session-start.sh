@@ -31,8 +31,21 @@ emit_setup_hint() {
     [ "$age" -lt 86400 ] && exit 0
   fi
   mkdir -p "$(dirname "$stamp")" 2>/dev/null && touch "$stamp" 2>/dev/null
-  # shellcheck disable=SC2016  # backticks are markdown, not expansion
-  printf '%s\n' '{"systemMessage":"Kemory plugin: no memory backend configured yet. Install the CLI with `brew install sekondbrainailabs/s9n/kemory` then run `kemory login` (browser sign-in). Already have a key? Export KEMORY_API_KEY instead. Silence this with KEMORY_QUIET_SETUP=1."}'
+
+  # Never claim "nothing is configured": the MCP tools authenticate
+  # separately and are very often already working when this fires. Say what
+  # is actually true -- the hooks have no credential of their own -- and if a
+  # key is sitting in an MCP config, name that file, because following our
+  # own docs is the most likely way to arrive here.
+  local found msg
+  found="$(kemory_find_mcp_config_key)"
+  if [ -n "$found" ]; then
+    msg="Kemory plugin: found an API key in $found, which the hooks cannot read \u2014 they take a credential from the environment or the CLI, not from MCP config. Your memory tools are unaffected. To turn the hooks on, export KEMORY_API_KEY with that same key."
+  else
+    msg="Kemory plugin: the hooks have no credential, so context injection, prompt recall, rating and capture are off. Your MCP memory tools may already be working \u2014 they authenticate separately. To turn the hooks on, run \`kemory login\` (browser sign-in) or export KEMORY_API_KEY."
+  fi
+  KEMORY_MSG="$msg" python3 -c 'import json, os; print(json.dumps({"systemMessage": os.environ["KEMORY_MSG"].encode().decode("unicode_escape") + " Silence this with KEMORY_QUIET_SETUP=1."}))' 2>/dev/null \
+    || printf '%s\n' '{"systemMessage":"Kemory plugin: the hooks have no credential, so context injection, recall, rating and capture are off. Run kemory login, or export KEMORY_API_KEY. Silence this with KEMORY_QUIET_SETUP=1."}'
   exit 0
 }
 
