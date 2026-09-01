@@ -3,6 +3,24 @@
 All notable changes to this project are documented here. This project follows
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.5] — 2026-09-01
+
+### Fixed
+- **The 0.2.4 README claimed there is no Windows build. There is.**
+  `kemory-windows-x64.zip` ships on the same release as the macOS and Linux
+  tarballs. The claim came from reading the Homebrew formula, which has only
+  `on_macos` and `on_linux` blocks — a source that structurally cannot express
+  a Windows build was treated as evidence one does not exist. Same error class
+  as the payload-shape defects in 0.1.3 and 0.2.1: inferring absence from a
+  source that cannot represent presence.
+
+  The real limit is narrower and still worth stating: the **hooks** are `bash`
+  scripts calling `curl` and `python3`, so on Windows they need Git Bash or
+  WSL, which is untested. The CLI runs on Windows; the hooks are unproven
+  there.
+- Removed a duplicated Quickstart in `README.md`, left by the 0.2.4 rebase
+  against the two credential PRs.
+
 ## [0.2.4] — 2026-09-01
 
 Four ways a user could believe the plugin was working while the hooks were

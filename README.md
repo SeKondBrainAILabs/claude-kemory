@@ -49,34 +49,6 @@ authenticates the tools and is invisible to the hooks** — the most common way
 to end up with working tools and nothing else. `/kemory:status` detects that
 case and says so.
 
-
-```
-/plugin marketplace add SeKondBrainAILabs/claude-kemory
-```
-
-```
-/plugin install kemory@kemory
-```
-
-**2. Give it a credential.**
-
-Kemory has two halves that authenticate separately: the `kemory_*` MCP
-**tools**, and the **hooks** that make the agent use them. One sign-in covers
-both:
-
-```bash
-kemory login
-```
-
-Browser sign-in (OAuth 2.0 device flow) — no keys to copy or paste.
-
-Don't have the CLI? You don't need it. If you already reach Kemory through the
-connector or a custom MCP endpoint, you have the tools; give the hooks a key of
-their own with `export KEMORY_API_KEY="..."`. See
-[Connecting without the CLI](#connecting-without-the-cli) — and note that a key
-placed in an MCP config file is *not* visible to the hooks, which is the most
-common way to end up with working tools and inert hooks.
-
 **3. Confirm it works.**
 
 ```
@@ -89,8 +61,8 @@ and recalls get rated so retrieval keeps improving.
 <details>
 <summary>Getting the CLI, with or without Homebrew</summary>
 
-Homebrew is a convenience, not a requirement — the tap wraps four prebuilt
-tarballs published on a GitHub release:
+Homebrew is a convenience, not a requirement — the tap wraps prebuilt binaries
+published on a GitHub release:
 
 ```bash
 brew install sekondbrainailabs/s9n/kemory
@@ -104,9 +76,13 @@ curl -fsSL https://github.com/SeKondBrainAILabs/homebrew-s9n/releases/latest/dow
   | tar -xz -C ~/.local/bin
 ```
 
-**Supported platforms.** macOS and Linux, on arm64 and x64. **There is no
-Windows build**, and the hooks are `bash` scripts calling `curl` and `python3`,
-so Windows would need Git Bash or WSL — untested, and not currently claimed.
+Windows has a build too — `kemory-windows-x64.zip` on the same release.
+
+**Supported platforms.** The CLI ships for macOS and Linux (arm64, x64) and
+Windows x64. **The plugin's hooks are narrower:** they are `bash` scripts
+calling `curl` and `python3`, so on Windows they need Git Bash or WSL. That
+combination is untested, so Windows is not currently claimed for the hooks even
+though the CLI runs there.
 
 </details>
 

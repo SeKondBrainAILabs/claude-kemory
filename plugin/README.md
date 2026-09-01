@@ -56,9 +56,10 @@ fails, `/kemory:status` says so rather than leaving the hooks quietly rejected.
 
 ### Platform support
 
-macOS and Linux, arm64 and x64. The hooks are `bash` scripts calling `curl` and
-`python3`. There is no Windows CLI build; Windows would need Git Bash or WSL
-and is untested, so it is not claimed.
+The CLI ships for macOS and Linux (arm64, x64) and Windows x64. The hooks are
+narrower: `bash` scripts calling `curl` and `python3`, so on Windows they need
+Git Bash or WSL. Untested there, so Windows is not claimed for the hooks even
+though the CLI runs on it.
 
 ## Session context injection
 
