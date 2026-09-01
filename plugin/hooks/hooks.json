@@ -1,4 +1,5 @@
 {
+  "description": "Kemory: persistent memory for Claude Code. Hooks whose output is READ — SessionStart, UserPromptSubmit, PreToolUse — must stay synchronous: an async hook's stdout is discarded, which would silently kill context injection and the read-only auto-approval while still appearing to run. They fail open instead, with every network call capped (3-6s) so a dead network never stalls a session. Capture writes and has no output anyone reads, so it runs async on both Stop and SessionEnd.",
   "hooks": {
     "SessionStart": [
       {
@@ -12,9 +13,32 @@
         ]
       }
     ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/prompt-recall.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "mcp__.*__(kemory|s9nmem)_.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/recall-approve.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
-        "matcher": "mcp__.*__kemory_(recall.*|ask|memory|find_similar|get_.*)",
+        "matcher": "mcp__.*__kemory_(recall.*|ask|find_similar|get_.*)",
         "hooks": [
           {
             "type": "command",
@@ -31,6 +55,18 @@
             "type": "command",
             "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreCompact\",\"additionalContext\":\"Context is about to be compacted. If this session established durable facts, decisions, or solved problems not yet in kemory, call kemory_consolidate_session (or kemory_store_memory for individual facts) NOW, before they are summarized away.\"}}'",
             "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/capture.sh",
+            "timeout": 15,
+            "async": true
           }
         ]
       }

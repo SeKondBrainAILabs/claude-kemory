@@ -7,9 +7,11 @@ Hooks and a skill that make Claude Code use Kemory memory well.
 | Hook | Event | Behaviour |
 |------|-------|-----------|
 | `session-start.sh` | `SessionStart` | Injects your Kemory namespace summaries so the session starts informed, and warns once if Kemory isn't configured yet |
+| `prompt-recall.sh` | `UserPromptSubmit` | Searches Kemory with your prompt and injects the top matches, so recall happens on every substantive prompt instead of only when the agent thinks to spend a tool call |
+| `recall-approve.sh` | `PreToolUse` on Kemory tools | Auto-approves **read-only** tools so recall costs no permission prompt. Writes still ask, every time |
 | `rate-reminder.sh` | `PostToolUse` on any Kemory recall tool | Reminds the agent to rate memories it actually used, so recall quality improves over time. Fires only when the response is rateable — it carries a `recall_id` or a non-empty result list |
 | inline | `PreCompact` | Reminds the agent to consolidate before context is summarised away |
-| `capture.sh` | `SessionEnd` | **Opt-in.** Stores a bounded, redacted digest of the session as an episodic memory |
+| `capture.sh` | `Stop`, `SessionEnd` | **Opt-in.** Stores new turns as redacted episodic memories as the session goes, so a killed session still leaves its work behind |
 
 Plus:
 
@@ -50,6 +52,31 @@ of starting blind.
 If Kemory is not configured, the hook prints one short setup notice and then
 stays quiet for 24 hours rather than nagging every session.
 
+## Prompt recall
+
+On every substantive prompt the plugin searches your memories with the prompt
+itself and injects the top matches. This is the difference between an
+instruction and a mechanism: telling an agent to "recall when the topic shifts"
+relies on it noticing the shift.
+
+The query is redacted before it leaves your machine, using the same rules as
+capture. Prompts under 12 characters and those starting with `/`, `!` or `#`
+are skipped. A memory injected once is not injected again in the same session.
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `KEMORY_PROMPT_RECALL` | `1` | Set to `0` to disable prompt recall |
+| `KEMORY_PROMPT_RECALL_LIMIT` | `5` | Maximum memories injected per prompt |
+| `KEMORY_PROMPT_RECALL_MIN_RELEVANCE` | `0.55` | Raw-cosine relevance floor (not the blended `min_score`) |
+| `KEMORY_PROMPT_RECALL_ITEM_CHARS` | `600` | Per-memory truncation in the injected block |
+| `KEMORY_PROMPT_RECALL_NAMESPACE` | all | Restrict recall to one namespace |
+| `KEMORY_PROMPT_RECALL_TIMEOUT` | `3` | Seconds to wait for the API |
+
+Because this path uses `POST /api/v1/memories/search`, which returns memory ids
+rather than an invocation id, hook-injected memories carry no `recall_id`. The
+agent is told to rate them by `memory_id`; they will not appear in recall
+*coverage* metrics, which join on recall ids.
+
 ## Automatic session capture (opt-in)
 
 Capture is **off** unless you set it explicitly, because it uploads
@@ -63,7 +90,8 @@ export KEMORY_AUTO_CAPTURE=1
 |----------|---------|---------|
 | `KEMORY_AUTO_CAPTURE` | `0` | Set to `1` to enable capture |
 | `KEMORY_CAPTURE_NAMESPACE` | `shared` | Namespace to write digests to |
-| `KEMORY_CAPTURE_MAX_TURNS` | `12` | How many recent user turns to include |
+| `KEMORY_CAPTURE_MAX_TURNS` | `12` | Maximum user turns in a single stored memory |
+| `KEMORY_CAPTURE_MIN_NEW_TURNS` | `3` | New turns required before a mid-session `Stop` stores anything; `SessionEnd` flushes any remainder |
 | `KEMORY_CAPTURE_SOURCE` | `claude-code` | Value recorded in the memory's `metadata.source` |
 | `KEMORY_ENV` | `prod` | Which credentials file to read |
 | `KEMORY_URL` | `https://api.kemory.sekondbrain.ai` | Override only for a self-hosted or community instance |

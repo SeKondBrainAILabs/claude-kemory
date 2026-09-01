@@ -26,6 +26,15 @@ while IFS= read -r f; do
   fi
 done < <(find . -name '*.sh' -not -path './.git/*')
 
+echo "→ python modules"
+while IFS= read -r f; do
+  if python3 -c 'import ast,sys; ast.parse(open(sys.argv[1]).read())' "$f" 2>/dev/null; then
+    echo "  ok   $f"
+  else
+    echo "  FAIL $f (syntax)"; fail=1
+  fi
+done < <(find . -name '*.py' -not -path './.git/*' -not -path './test/*')
+
 if command -v claude >/dev/null 2>&1; then
   echo "→ official manifest validation"
   if claude plugin validate . >/dev/null 2>&1; then

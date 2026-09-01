@@ -1,0 +1,9 @@
+{
+  "session_id": "00000000-0000-0000-0000-000000000000",
+  "transcript_path": "/tmp/kemory-fixture-transcript.jsonl",
+  "cwd": "/Users/example/project",
+  "prompt_id": "11111111-1111-1111-1111-111111111111",
+  "permission_mode": "default",
+  "hook_event_name": "UserPromptSubmit",
+  "prompt": "why did we choose hybrid search over fts for recall?"
+}

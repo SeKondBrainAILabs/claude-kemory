@@ -1,7 +1,15 @@
 #!/usr/bin/env bash
-# SessionEnd hook — capture a bounded digest of the session into Kemory as an
-# episodic memory, tagged with session_id so the server-side Reflector can
-# consolidate episodes into a semantic summary later.
+# Stop + SessionEnd hook — capture the session into Kemory as episodic memories
+# tagged with session_id, so the server-side Reflector can consolidate them into
+# a semantic summary later.
+#
+# Runs on Stop (after each assistant response) so a session that is killed,
+# crashes, or is never cleanly ended still leaves its work behind. SessionEnd
+# then flushes whatever is left.
+#
+# Only NEW turns are posted. Kemory's community edition has no idempotency
+# support, so a client-side high-water mark is the only thing preventing the
+# same turns being stored over and over as overlapping memories.
 #
 # OPT-IN. Capture uploads conversation content to your Kemory instance, so it
 # stays off until you explicitly set KEMORY_AUTO_CAPTURE=1.
@@ -21,29 +29,33 @@ kemory_resolve_auth || exit 0
 
 HOOK_INPUT="$(cat)"
 export HOOK_INPUT
+export KEMORY_SCRIPT_DIR="$DIR"
+# Importing redact.py must not litter the user's plugin directory.
+export PYTHONDONTWRITEBYTECODE=1
 export KEMORY_NAMESPACE="${KEMORY_CAPTURE_NAMESPACE:-shared}"
 export KEMORY_MAX_TURNS="${KEMORY_CAPTURE_MAX_TURNS:-12}"
+export KEMORY_MIN_NEW_TURNS="${KEMORY_CAPTURE_MIN_NEW_TURNS:-3}"
 export KEMORY_CAPTURE_SOURCE="${KEMORY_CAPTURE_SOURCE:-claude-code}"
 
 python3 <<'PY' 2>/dev/null
-import hashlib, json, os, re, urllib.request
+import hashlib, json, os, sys, urllib.request
+
+sys.path.insert(0, os.environ["KEMORY_SCRIPT_DIR"])
+from redact import redact  # noqa: E402
 
 MAX_CHARS = 8000
-# Redaction must not eat ordinary prose: developer conversations say "token"
-# and "secret" constantly, so a keyword only redacts when it is followed by an
-# actual assignment and a value long enough to be a credential.
-SECRET = re.compile(
-    r'(?i)(bearer\s+[\w\-\.]{8,}'
-    r'|(?:api[_-]?key|api[_-]?token|access[_-]?token|auth[_-]?token|token'
-    r'|secret|password|passwd|pwd)\s*[:=]\s*["\']?[^\s"\',;}]{6,}'
-    r'|sk-[A-Za-z0-9]{16,}|gh[pousr]_[A-Za-z0-9]{20,}'
-    r'|AKIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{10,}'
-    r'|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}'
-    r'|-----BEGIN[^-]+PRIVATE KEY-----)'
-)
+
 
 def die():
     raise SystemExit(0)
+
+
+def env_int(name, default):
+    try:
+        return int(os.environ[name])
+    except (KeyError, ValueError):
+        return default
+
 
 try:
     url = os.environ["KEMORY_BASE_URL"]
@@ -56,11 +68,21 @@ if not url or not auth_value:
 if not url.startswith(("http://", "https://")):
     die()  # never send a credential to a non-HTTP scheme
 
+# A Stop hook that runs because of a Stop hook would capture in a loop.
+if hook.get("stop_hook_active"):
+    die()
+
 session_id = hook.get("session_id") or ""
 reason = hook.get("reason") or "unknown"
+event = hook.get("hook_event_name") or ""
 transcript = hook.get("transcript_path") or ""
 if not transcript or not os.path.isfile(transcript):
     die()
+
+# SessionEnd is the last chance to store anything, so it flushes whatever is
+# pending. Stop fires after every assistant response and waits for enough new
+# material to be worth a memory.
+flushing = event != "Stop"
 
 # Only the user's own turns: they carry intent and goals, and skipping
 # assistant output keeps the digest small and avoids re-storing tool dumps.
@@ -87,26 +109,59 @@ try:
 except Exception:
     die()
 
-turns = turns[-int(os.environ["KEMORY_MAX_TURNS"]):]
 if not turns:
     die()
 
-body = SECRET.sub("[REDACTED]", "\n".join(f"- {t}" for t in turns))[:MAX_CHARS]
+# High-water mark of turns already stored for this session. Without it, the
+# sliding window below produces a different digest every turn and every Stop
+# would store a near-duplicate of the last one.
+marker, state = None, {"digest": "", "captured_turns": 0}
+state_dir = os.path.expanduser("~/.kemory/.captured")
+try:
+    os.makedirs(state_dir, exist_ok=True)
+    marker = os.path.join(state_dir, (session_id or "nosession")[:64].replace("/", "_"))
+    if os.path.isfile(marker):
+        raw = open(marker).read().strip()
+        try:
+            loaded = json.loads(raw)
+            if isinstance(loaded, dict):
+                state = {
+                    "digest": str(loaded.get("digest") or ""),
+                    "captured_turns": max(0, int(loaded.get("captured_turns") or 0)),
+                }
+        except Exception:
+            # Pre-0.2.0 markers were a bare sha256 of the whole digest.
+            state = {"digest": raw, "captured_turns": 0}
+except OSError:
+    marker = None
+
+already = state["captured_turns"]
+new_turns = turns[already:]
+if not new_turns:
+    die()
+if not flushing and len(new_turns) < env_int("KEMORY_MIN_NEW_TURNS", 3):
+    die()
+
+# Bound the payload. If a burst exceeded the cap we deliberately drop the
+# oldest of the new turns and still advance the mark past them, rather than
+# storing the same window twice.
+posted = new_turns[-env_int("KEMORY_MAX_TURNS", 12):]
+
+body = redact("\n".join(f"- {t}" for t in posted))[:MAX_CHARS]
+window = (
+    f"turns {already + len(new_turns) - len(posted) + 1}"
+    f"-{already + len(new_turns)}"
+)
 content = (
     "What was this coding session about? Session digest captured automatically "
-    f"at session end (user turns only, secrets redacted).\n\ncwd: "
+    f"({'at session end' if flushing else 'mid-session'}, user turns only, "
+    f"secrets redacted, {window}).\n\ncwd: "
     f"{hook.get('cwd', 'unknown')}\n\n{body}"
 )
 
 digest = hashlib.sha256(content.encode()).hexdigest()
-state = os.path.expanduser("~/.kemory/.captured")
-try:
-    os.makedirs(state, exist_ok=True)
-    marker = os.path.join(state, (session_id or "nosession")[:64].replace("/", "_"))
-    if os.path.isfile(marker) and open(marker).read().strip() == digest:
-        die()  # identical digest already stored for this session
-except OSError:
-    marker = None
+if digest == state["digest"]:
+    die()  # identical digest already stored for this session
 
 req = urllib.request.Request(
     url + "/api/v1/memories",
@@ -119,7 +174,8 @@ req = urllib.request.Request(
         "metadata": {
             "source": os.environ.get("KEMORY_CAPTURE_SOURCE", "claude-code"),
             "capture": "auto",
-            "turns": len(turns),
+            "capture_kind": "flush" if flushing else "incremental",
+            "turns": len(posted),
             "end_reason": reason,
         },
     }).encode(),
@@ -132,11 +188,11 @@ req = urllib.request.Request(
 try:
     urllib.request.urlopen(req, timeout=8).read()
 except Exception:
-    raise SystemExit(0)  # never record a digest we did not manage to store
+    raise SystemExit(0)  # never advance the mark past turns we did not store
 if marker:
     try:
         with open(marker, "w") as fh:
-            fh.write(digest)
+            json.dump({"digest": digest, "captured_turns": len(turns)}, fh)
     except OSError:
         pass
 PY

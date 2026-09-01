@@ -3,6 +3,54 @@
 All notable changes to this project are documented here. This project follows
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.0] — 2026-08-31
+
+### Added
+- **Prompt recall.** A `UserPromptSubmit` hook now searches Kemory with your
+  prompt and injects the top matches, so recall happens on every substantive
+  prompt instead of only when the agent thinks to spend a tool call on it.
+  Default on; `KEMORY_PROMPT_RECALL=0` disables it. The query is redacted
+  before it leaves the machine, and a memory injected once is not injected
+  again in the same session.
+
+  Known limitation: `POST /api/v1/memories/search` returns memory ids, not an
+  invocation id, so hook-injected memories carry no `recall_id`. The agent is
+  told to rate them by `memory_id`. They will not appear in recall *coverage*
+  metrics, which join on recall ids.
+- **Read-only auto-approval.** A `PreToolUse` hook approves read-only Kemory
+  tools so recall no longer costs a permission prompt. Writes still ask. The
+  gate is an explicit allowlist, never a regex over the tool family — see the
+  fix below for why that distinction matters.
+- The hooks manifest now records why the injection hooks must stay
+  synchronous: an async hook's stdout is discarded, so an async SessionStart,
+  UserPromptSubmit or PreToolUse would silently inject nothing while still
+  appearing to run.
+- Real captured payloads for `UserPromptSubmit`, `PreToolUse` and `Stop` as
+  test fixtures, alongside the existing PostToolUse one.
+
+### Changed
+- **Capture is incremental and now also runs on `Stop`,** so a session that is
+  killed or crashes still leaves its work behind rather than losing everything.
+  Only new turns are posted: the marker at `~/.kemory/.captured/<session_id>`
+  became `{"digest", "captured_turns"}`, a high-water mark. Without it the
+  12-turn window would slide on every response and store a near-duplicate each
+  time — the same defect class as 57d6e53. `KEMORY_CAPTURE_MIN_NEW_TURNS`
+  (default 3) gates mid-session stores; `SessionEnd` flushes the remainder.
+  Pre-0.2.0 markers are read and upgraded. Capture remains opt-in.
+- Secret redaction moved to a single shared `plugin/scripts/redact.py` now that
+  two hooks send text off the machine. Behaviour is unchanged and still pinned
+  by the existing redaction tests.
+
+### Fixed
+- **The rate-reminder matcher matched a write.** `kemory_memory` is an alias of
+  `kemory_store_memory` and requires `memory:write`, but the 0.1.3 matcher
+  `kemory_(recall.*|ask|memory|find_similar|get_.*)` included it, so the plugin
+  would have prompted the agent to rate memories after a *store*. It was silent
+  in practice only because the script fails closed without a `recall_id`. Had
+  that regex been reused for the new auto-approval hook, it would have
+  auto-approved memory writes. A test now asserts the matcher rejects every
+  write in the family.
+
 ## [0.1.3] — 2026-08-31
 
 ### Fixed
