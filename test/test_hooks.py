@@ -678,5 +678,44 @@ class HookTest(unittest.TestCase):
         self.assertEqual(Recorder.posts, [])
 
 
+class FixtureCoverage(unittest.TestCase):
+    """Every registered hook event must have a captured payload behind it.
+
+    This exists because three shipped defects had one cause: a hook written
+    against an *assumed* payload shape. The rate reminder never fired because
+    an MCP tool_response is a list of content blocks, not a dict. PreCompact
+    silently rejects hookSpecificOutput.additionalContext. Both were invisible
+    to tests fed hand-written payloads. So the rule is enforced here rather
+    than left to discipline: no fixture, no claim that the hook works.
+
+    Values in fixtures are anonymised; the KEYS are what must be real.
+    """
+
+    # Events whose payload has not been captured from a live session yet.
+    # Removing an entry requires adding the fixture, not editing this set.
+    UNCAPTURED = {"SessionStart"}
+
+    def test_every_registered_event_has_a_fixture(self):
+        events = set(json.loads(
+            (ROOT / "plugin" / "hooks" / "hooks.json").read_text())["hooks"])
+        have = {json.loads(f.read_text()).get("hook_event_name")
+                for f in (ROOT / "test" / "fixtures").glob("*.json")}
+        missing = events - have - self.UNCAPTURED
+        self.assertEqual(missing, set(),
+                         f"registered with no captured payload: {sorted(missing)}")
+
+    def test_uncaptured_set_lists_only_real_events(self):
+        # A stale exemption would silently excuse a hook that does have a
+        # fixture, or name an event we no longer register.
+        events = set(json.loads(
+            (ROOT / "plugin" / "hooks" / "hooks.json").read_text())["hooks"])
+        self.assertEqual(self.UNCAPTURED - events, set(),
+                         "UNCAPTURED names an event that is not registered")
+        have = {json.loads(f.read_text()).get("hook_event_name")
+                for f in (ROOT / "test" / "fixtures").glob("*.json")}
+        self.assertEqual(self.UNCAPTURED & have, set(),
+                         "UNCAPTURED excuses an event that already has a fixture")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
