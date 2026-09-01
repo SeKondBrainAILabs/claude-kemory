@@ -22,6 +22,11 @@ if kemory_resolve_auth; then
   esac
   ok "credentials resolved — $mode"
   info "endpoint: $KEMORY_BASE_URL"
+  if [ -n "${KEMORY_URL_RETARGETED_FROM:-}" ]; then
+    info "your cached credential names ${KEMORY_URL_RETARGETED_FROM}, which no"
+    info "longer serves the API — using the current host instead. Re-run"
+    info "'kemory login' to update the credential itself"
+  fi
 else
   bad "no credentials"
   info "run 'kemory login' (browser sign-in), or set KEMORY_API_KEY for a keyed setup"
@@ -35,6 +40,12 @@ if [ -n "${KEMORY_BASE_URL:-}" ] && command -v curl >/dev/null 2>&1; then
     200)      ok  "API reachable and credentials accepted (HTTP 200)" ;;
     401|403)  bad "API reachable but rejected the credentials (HTTP $code)" ;;
     000)      bad "API unreachable — wrong URL, or the server is down" ;;
+    # A redirect means the endpoint is not an API host — typically a
+    # browser/SSO host, which answers every path with a login redirect. Naming
+    # that is the difference between a fix and a mystery status code.
+    3??)      bad "API redirected (HTTP $code) — that endpoint is not the API"
+              info "a browser or SSO host cannot serve the API; re-run 'kemory login',"
+              info "or set KEMORY_URL to your instance's API host" ;;
     *)        bad "API returned HTTP $code" ;;
   esac
 fi

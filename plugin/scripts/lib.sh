@@ -4,6 +4,7 @@
 # Sets, on success (return 0):
 #   KEMORY_BASE_URL    — API base, no trailing slash
 #   KEMORY_AUTH_HEADER — a complete header line to send
+#   KEMORY_URL_RETARGETED_FROM — set only when a superseded host was rewritten
 #
 # Hosted Kemory authenticates with a bearer token; the community edition
 # authenticates with X-API-Key only (backend/core/auth.py), so both are
@@ -12,9 +13,35 @@
 # community instance, so the common case needs a key and nothing else.
 KEMORY_DEFAULT_URL="${KEMORY_DEFAULT_URL:-https://api.kemory.sekondbrain.ai}"
 
+# A cached credential keeps the API host it was written with, so a host that has
+# since stopped serving the API survives indefinitely on an existing install —
+# the default above only ever reaches a fresh login. The kemory CLI rewrites
+# these when it loads a credential; this path reads the file directly, so it
+# needs the same rewrite or the hooks and /kemory:status stay pointed at a dead
+# host while the CLI itself is fine.
+#
+# Exact match only. A self-hosted or community host that merely looks similar
+# must be left alone.
+#
+# Answers in KEMORY_RETARGETED_URL rather than on stdout: a command
+# substitution would run this in a subshell and lose the
+# KEMORY_URL_RETARGETED_FROM breadcrumb, leaving a silent rewrite.
+kemory_retarget_url() {
+  KEMORY_RETARGETED_URL="$1"
+  case "$1" in
+    # Retired: now redirects to the browser dashboard, which sends any API path
+    # on to SSO login. A caller sees a redirect or an HTML login page.
+    https://kemory.prod.apps.s9n.ai)
+      KEMORY_RETARGETED_URL="https://api.kemory.s9n.ai"
+      KEMORY_URL_RETARGETED_FROM="$1"
+      ;;
+  esac
+}
+
 kemory_resolve_auth() {
   local creds url token api_key
   url="" ; token="" ; api_key=""
+  unset KEMORY_URL_RETARGETED_FROM
 
   if [ -n "${KEMORY_API_KEY:-}" ]; then
     api_key="$KEMORY_API_KEY"
@@ -49,7 +76,8 @@ for var, key in (("url", "kemory_url"), ("token", "access_token"), ("api_key", "
   else
     return 1
   fi
-  KEMORY_BASE_URL="${url%/}"
-  export KEMORY_BASE_URL KEMORY_AUTH_HEADER
+  kemory_retarget_url "${url%/}"
+  KEMORY_BASE_URL="$KEMORY_RETARGETED_URL"
+  export KEMORY_BASE_URL KEMORY_AUTH_HEADER KEMORY_URL_RETARGETED_FROM
   return 0
 }
