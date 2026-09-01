@@ -23,9 +23,15 @@ if kemory_resolve_auth; then
   ok "credentials resolved — $mode"
   info "endpoint: $KEMORY_BASE_URL"
   if [ -n "${KEMORY_URL_RETARGETED_FROM:-}" ]; then
-    info "your cached credential names ${KEMORY_URL_RETARGETED_FROM}, which no"
-    info "longer serves the API — using the current host instead. Re-run"
-    info "'kemory login' to update the credential itself"
+    info "${KEMORY_URL_RETARGETED_FROM} no longer serves the API — using the"
+    info "current host instead. Where that value comes from still needs fixing:"
+    # Two different setups reach the same dead host, and the remedy differs. Do
+    # not tell someone with no CLI to re-run a CLI command.
+    if [ -n "${KEMORY_URL:-}" ]; then
+      info "KEMORY_URL is set — point it at https://api.kemory.s9n.ai"
+    else
+      info "it is stored in your credentials file — re-run 'kemory login'"
+    fi
   fi
 else
   bad "no credentials"

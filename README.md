@@ -12,7 +12,11 @@ they are lost to compaction.
 
 ## Quickstart
 
-**1. Install the Kemory CLI and sign in.**
+**1. Give the plugin a credential.** Either route works; the hooks and the
+bundled MCP server read both.
+
+*With the CLI* — browser sign-in, no keys to copy or paste. One login covers
+both the MCP bridge and the hooks:
 
 ```bash
 brew install sekondbrainailabs/s9n/kemory
@@ -22,9 +26,17 @@ brew install sekondbrainailabs/s9n/kemory
 kemory login
 ```
 
-Browser sign-in (OAuth 2.0 device flow) — no keys to copy or paste. This one
-login gives the plugin everything it needs: the MCP bridge for memory tools,
-and credentials the hooks read to inject your context and store facts.
+*Without the CLI* — if you already use the Kemory connector, or you are on
+self-hosted or the community edition, set a key instead. The connector gives
+you the tools but not the hooks, which authenticate separately:
+
+```bash
+export KEMORY_API_KEY="..."   # from kemory.sekondbrain.ai
+```
+
+See [Connecting without the CLI](#connecting-without-the-cli) below for the
+connector and self-hosted details, including which MCP server to disable so you
+are not running two.
 
 **2. Install the plugin.**
 
@@ -45,7 +57,7 @@ and credentials the hooks read to inject your context and store facts.
 From the next session your namespace summaries are injected automatically,
 and recalls get rated so retrieval keeps improving.
 
-<details>
+<details id="connecting-without-the-cli">
 <summary>Connecting without the CLI</summary>
 
 **Already using the Kemory connector?** Adding *Kemory by SeKondBrain* in your
