@@ -49,7 +49,12 @@ else
     info "found an API key in $mcp_key, which the hooks cannot read"
     info "export that same key as KEMORY_API_KEY to turn the hooks on"
   else
-    info "run 'kemory login' (browser sign-in), or set KEMORY_API_KEY"
+    if command -v kemory >/dev/null 2>&1; then
+      info "run 'kemory login' (browser sign-in), or set KEMORY_API_KEY"
+    else
+      # No CLI on this machine, so do not recommend a CLI command as step one.
+      info "set KEMORY_API_KEY, or install the kemory CLI and run 'kemory login'"
+    fi
   fi
 fi
 

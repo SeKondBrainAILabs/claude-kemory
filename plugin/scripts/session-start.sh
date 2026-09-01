@@ -42,7 +42,13 @@ emit_setup_hint() {
   if [ -n "$found" ]; then
     msg="Kemory plugin: found an API key in $found, which the hooks cannot read \u2014 they take a credential from the environment or the CLI, not from MCP config. Your memory tools are unaffected. To turn the hooks on, export KEMORY_API_KEY with that same key."
   else
-    msg="Kemory plugin: the hooks have no credential, so context injection, prompt recall, rating and capture are off. Your MCP memory tools may already be working \u2014 they authenticate separately. To turn the hooks on, run \`kemory login\` (browser sign-in) or export KEMORY_API_KEY."
+    # Do not name a command the machine does not have. A fresh install with no
+    # CLI got told to run `kemory login` with no way to obtain it.
+    if command -v kemory >/dev/null 2>&1; then
+      msg="Kemory plugin: the hooks have no credential, so context injection, prompt recall, rating and capture are off. Your MCP memory tools may already be working \u2014 they authenticate separately. To turn the hooks on, run \`kemory login\` (browser sign-in) or export KEMORY_API_KEY."
+    else
+      msg="Kemory plugin: the hooks have no credential, so context injection, prompt recall, rating and capture are off. Your MCP memory tools may already be working \u2014 they authenticate separately. Quickest fix: export KEMORY_API_KEY with a key from kemory.sekondbrain.ai. Or install the kemory CLI and run \`kemory login\` \u2014 see the plugin README for how to get it."
+    fi
   fi
   KEMORY_MSG="$msg" python3 -c 'import json, os; print(json.dumps({"systemMessage": os.environ["KEMORY_MSG"].encode().decode("unicode_escape") + " Silence this with KEMORY_QUIET_SETUP=1."}))' 2>/dev/null \
     || printf '%s\n' '{"systemMessage":"Kemory plugin: the hooks have no credential, so context injection, recall, rating and capture are off. Run kemory login, or export KEMORY_API_KEY. Silence this with KEMORY_QUIET_SETUP=1."}'

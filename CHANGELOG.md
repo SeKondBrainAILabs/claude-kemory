@@ -3,6 +3,25 @@
 All notable changes to this project are documented here. This project follows
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.6] — 2026-09-01
+
+Two defects found by actually walking the install on a machine with no CLI and
+an empty `$HOME`, rather than reasoning about it.
+
+### Fixed
+- **The README's non-Homebrew install command would have scattered a Python
+  runtime across the user's `bin` directory.** The release archive is a bundle —
+  a `kemory` launcher beside an `_internal/` runtime tree, 223 files — so
+  `tar -xz -C ~/.local/bin` unpacks all of it into a `PATH` directory. Corrected
+  to extract into `~/.kemory/lib` and symlink the launcher, which is what the
+  s9n installer does and what actually works (verified: `kemory, version 0.6.7`
+  from the symlink).
+- **The setup notice and `/kemory:status` recommended `kemory login` on machines
+  with no `kemory` binary,** and gave no way to obtain one. Both are now
+  CLI-aware: without the CLI they lead with `KEMORY_API_KEY` — the remedy that
+  needs no install — and mention the CLI as something to install first. With
+  the CLI present the wording is unchanged.
+
 ## [0.2.5] — 2026-09-01
 
 ### Fixed

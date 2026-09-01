@@ -969,6 +969,23 @@ class CredentialTest(unittest.TestCase):
         self.assertNotIn("no memory backend", msg)
         self.assertIn("hooks", msg)
 
+    def test_notice_does_not_name_the_cli_when_it_is_absent(self):
+        # A fresh install with no CLI was told to run `kemory login`, with no
+        # way to obtain it. Found by actually walking the install (T4).
+        e = {k: v for k, v in os.environ.items() if not k.startswith("KEMORY_")}
+        e.update({"HOME": self.home, "CLAUDE_PROJECT_DIR": self.home,
+                  # A PATH with no kemory on it.
+                  "PATH": "/usr/bin:/bin:/usr/sbin:/sbin"})
+        r = subprocess.run([str(SCRIPTS / "session-start.sh")], input="{}",
+                           text=True, capture_output=True, env=e)
+        msg = json.loads(r.stdout)["systemMessage"]
+        # `kemory login` may be mentioned, but only as "install the CLI and
+        # run it" -- never as the first remedy on a machine without the CLI.
+        self.assertIn("KEMORY_API_KEY", msg)
+        self.assertIn("install the kemory CLI", msg)
+        self.assertLess(msg.index("KEMORY_API_KEY"), msg.index("kemory login"),
+                        "the reachable remedy must come first")
+
     def test_setup_notice_names_the_mcp_config_without_leaking_the_key(self):
         self.mcp_config({"mcpServers": {"kemory": {
             "headers": {"X-API-Key": "kemory_secret"}}}})

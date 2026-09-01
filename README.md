@@ -68,12 +68,19 @@ published on a GitHub release:
 brew install sekondbrainailabs/s9n/kemory
 ```
 
-Without Homebrew, take the binary directly. Replace the platform with one of
-`macos-arm64`, `macos-x64`, `linux-arm64`, `linux-x64`:
+Without Homebrew, take the binary directly. The archive is a bundle — a
+`kemory` launcher beside an `_internal/` runtime directory — so extract it into
+its own directory and link the launcher onto your `PATH`. Do **not** unpack it
+straight into a `bin` directory; that scatters 200-plus runtime files across it.
+Replace the platform with one of `macos-arm64`, `macos-x64`, `linux-arm64`,
+`linux-x64`:
 
 ```bash
+mkdir -p ~/.kemory/lib ~/.local/bin
 curl -fsSL https://github.com/SeKondBrainAILabs/homebrew-s9n/releases/latest/download/kemory-macos-arm64.tar.gz \
-  | tar -xz -C ~/.local/bin
+  | tar -xz -C ~/.kemory/lib
+ln -sf ~/.kemory/lib/kemory ~/.local/bin/kemory
+kemory --version
 ```
 
 Windows has a build too — `kemory-windows-x64.zip` on the same release.
