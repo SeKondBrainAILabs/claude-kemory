@@ -758,6 +758,35 @@ class HookTest(unittest.TestCase):
         self.assertEqual(retargeted_from, self.RETIRED_URL,
                          "a silent rewrite leaves the user debugging the wrong host")
 
+    def test_retired_host_is_retargeted_on_the_env_var_path_too(self):
+        """A keyed setup has no credentials file — the host comes from KEMORY_URL.
+
+        That is the setup of anyone using the connector for tools instead of the
+        CLI, so it must be covered by the same rewrite.
+        """
+        e = self.env(KEMORY_API_KEY="k", KEMORY_URL=self.RETIRED_URL)
+        r = subprocess.run(
+            ["bash", "-c",
+             f'. "{SCRIPTS / "lib.sh"}"; kemory_resolve_auth || exit 1; '
+             'printf "%s\n%s\n" "$KEMORY_BASE_URL" "${KEMORY_URL_RETARGETED_FROM:-}"'],
+            text=True, capture_output=True, env=e)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(r.stdout.splitlines()[:2], [self.CURRENT_URL, self.RETIRED_URL])
+
+    def test_status_remedy_matches_where_the_host_came_from(self):
+        """Never tell someone with no CLI to re-run a CLI command."""
+        r = self.run_script("status.sh", {}, KEMORY_API_KEY="k",
+                            KEMORY_URL=self.RETIRED_URL)
+        self.assertIn("KEMORY_URL is set", r.stdout)
+        self.assertNotIn("kemory login", r.stdout)
+
+        self.write_credentials(self.RETIRED_URL)
+        e = self.env(); e.pop("KEMORY_URL", None)
+        r = subprocess.run([str(SCRIPTS / "status.sh")], input="{}", text=True,
+                           capture_output=True, env=e)
+        self.assertIn("kemory login", r.stdout)
+        self.assertNotIn("KEMORY_URL is set", r.stdout)
+
     def test_self_hosted_host_is_left_alone(self):
         """Exact match only — a lookalike is somebody's own instance."""
         own = "https://kemory.internal.example.com"

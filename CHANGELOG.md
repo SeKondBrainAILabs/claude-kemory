@@ -3,6 +3,23 @@
 All notable changes to this project are documented here. This project follows
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.3] — 2026-09-01
+
+### Fixed
+- **A keyed setup got told to run a command it does not have.** Without the CLI
+  there is no credentials file: the API host comes from `KEMORY_URL`, so it
+  reaches a superseded host by a different route than a stale credential. The
+  0.2.2 rewrite already covered that path, but `/kemory:status` offered
+  `kemory login` as the remedy — not a command a connector or community-edition
+  user has installed. It now picks the remedy from where the host actually came
+  from, and both paths are pinned by tests.
+
+### Changed
+- The Quickstart names both credential routes at step 1. Installing the CLI was
+  step 1 with the keyed route collapsed in a `<details>` below it, so a
+  connector or community-edition user read a CLI-first onboarding for a setup
+  that does not involve the CLI at all.
+
 ## [0.2.2] — 2026-09-01
 
 ### Fixed
