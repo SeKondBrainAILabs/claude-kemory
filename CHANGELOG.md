@@ -3,6 +3,30 @@
 All notable changes to this project are documented here. This project follows
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.2] — 2026-09-01
+
+### Fixed
+- **A credential written before the API host moved kept the old host forever,
+  and `/kemory:status` reported it as a bare `HTTP 301`.** The hooks read
+  `~/.kemory/credentials-<env>` directly, and that file stores the API host
+  captured at login time — so changing the default only ever helped a fresh
+  login. `https://kemory.prod.apps.s9n.ai` has since stopped serving the API: it
+  redirects to the browser dashboard, which answers any API path with an SSO
+  login redirect. The result on an affected machine was every hook silently
+  failing and a status check printing a redirect code with no explanation.
+
+  `lib.sh` now rewrites that one host, exact-match, to the current API host, so
+  the hooks recover without a re-login — mirroring what the `kemory` CLI already
+  does when it loads a credential. The rewrite is announced rather than silent:
+  `/kemory:status` says which host your credential names and that
+  `kemory login` updates the file itself.
+
+- **A redirect from the API is now named instead of numbered.** Any 3xx reports
+  that the endpoint is not an API host — typically a browser or SSO host, which
+  redirects every path to login — and points at `kemory login` or `KEMORY_URL`.
+  This applies to self-hosted instances behind an SSO proxy too, not just the
+  retired host above.
+
 ## [0.2.1] — 2026-09-01
 
 ### Fixed

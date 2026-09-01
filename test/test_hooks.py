@@ -27,6 +27,7 @@ class Recorder(http.server.BaseHTTPRequestHandler):
     search_payload: dict = {"items": [], "total": 0}
     search_status: int = 200
     memories_status: int = 201
+    get_status: int = 200
 
     def do_POST(self):
         n = int(self.headers.get("Content-Length", 0))
@@ -43,7 +44,11 @@ class Recorder(http.server.BaseHTTPRequestHandler):
         self.wfile.write(b"{}")
 
     def do_GET(self):
-        self.send_response(200)
+        self.send_response(Recorder.get_status)
+        if Recorder.get_status // 100 == 3:
+            self.send_header("Location", "https://example.invalid/login")
+            self.end_headers()
+            return
         self.send_header("Content-Type", "application/json")
         self.end_headers()
         self.wfile.write(json.dumps(Recorder.get_payload).encode())
@@ -69,6 +74,7 @@ class HookTest(unittest.TestCase):
         Recorder.search_payload = {"items": [], "total": 0}
         Recorder.search_status = 200
         Recorder.memories_status = 201
+        Recorder.get_status = 200
         self.home = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.home, ignore_errors=True)
 
@@ -83,6 +89,29 @@ class HookTest(unittest.TestCase):
     def run_script(self, name, payload, **env):
         return subprocess.run([str(SCRIPTS / name)], input=json.dumps(payload),
                               text=True, capture_output=True, env=self.env(**env))
+
+    def write_credentials(self, kemory_url, env="prod"):
+        d = pathlib.Path(self.home) / ".kemory"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / f"credentials-{env}").write_text(json.dumps({
+            "access_token": "tok", "refresh_token": "ref",
+            "expires_at": 9999999999.0, "client_id": "kemory-cli",
+            "issuer": "https://issuer.invalid/realms/x",
+            "kemory_url": kemory_url, "env": env, "version": 2,
+        }))
+
+    def resolve_auth(self):
+        """Drive the shipped lib.sh and report what it resolved."""
+        e = self.env()
+        e.pop("KEMORY_URL", None)  # force the credentials-file path
+        r = subprocess.run(
+            ["bash", "-c",
+             f'. "{SCRIPTS / "lib.sh"}"; kemory_resolve_auth || exit 1; '
+             'printf "%s\n%s\n" "$KEMORY_BASE_URL" "${KEMORY_URL_RETARGETED_FROM:-}"'],
+            text=True, capture_output=True, env=e)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        url, retargeted_from = r.stdout.splitlines()[:2]
+        return url, retargeted_from
 
     def transcript(self, *messages):
         p = pathlib.Path(tempfile.mktemp(suffix=".jsonl", dir=self.home))
@@ -715,6 +744,50 @@ class HookTest(unittest.TestCase):
         self.assertEqual(r.stdout, "")
         self.assertEqual(Recorder.posts, [])
 
+    # --- superseded API hosts ---------------------------------------------
+    # A cached credential keeps the host it was written with, so a host that
+    # stops serving the API survives on an existing install indefinitely. These
+    # pin the rewrite that lets the hooks recover without a re-login.
+    RETIRED_URL = "https://kemory.prod.apps.s9n.ai"
+    CURRENT_URL = "https://api.kemory.s9n.ai"
+
+    def test_retired_api_host_is_retargeted(self):
+        self.write_credentials(self.RETIRED_URL)
+        url, retargeted_from = self.resolve_auth()
+        self.assertEqual(url, self.CURRENT_URL)
+        self.assertEqual(retargeted_from, self.RETIRED_URL,
+                         "a silent rewrite leaves the user debugging the wrong host")
+
+    def test_self_hosted_host_is_left_alone(self):
+        """Exact match only — a lookalike is somebody's own instance."""
+        own = "https://kemory.internal.example.com"
+        self.write_credentials(own)
+        url, retargeted_from = self.resolve_auth()
+        self.assertEqual(url, own)
+        self.assertEqual(retargeted_from, "", "nothing was rewritten")
+
+    def test_retarget_target_is_not_itself_superseded(self):
+        """One pass only, so a target that is also a key would not converge."""
+        self.write_credentials(self.CURRENT_URL)
+        url, retargeted_from = self.resolve_auth()
+        self.assertEqual(url, self.CURRENT_URL)
+        self.assertEqual(retargeted_from, "")
+
+    def test_status_names_a_redirect_instead_of_printing_the_code(self):
+        """A browser/SSO host answers every path with a login redirect.
+
+        Reporting a bare "HTTP 301" is what made this cost a developer an
+        afternoon, so the message has to say what a redirect means.
+        """
+        Recorder.get_status = 301
+        r = self.run_script("status.sh", {}, KEMORY_API_KEY="k")
+        self.assertIn("not the API", r.stdout)
+        self.assertIn("kemory login", r.stdout)
+
+    def test_status_still_reports_a_healthy_api(self):
+        r = self.run_script("status.sh", {}, KEMORY_API_KEY="k")
+        self.assertIn("HTTP 200", r.stdout)
+        self.assertNotIn("not the API", r.stdout)
 
 class FixtureCoverage(unittest.TestCase):
     """Every registered hook event must have a captured payload behind it.
@@ -753,7 +826,6 @@ class FixtureCoverage(unittest.TestCase):
                 for f in (ROOT / "test" / "fixtures").glob("*.json")}
         self.assertEqual(self.UNCAPTURED & have, set(),
                          "UNCAPTURED excuses an event that already has a fixture")
-
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
