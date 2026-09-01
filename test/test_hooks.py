@@ -305,6 +305,44 @@ class HookTest(unittest.TestCase):
         self.assertEqual(out["hookSpecificOutput"]["hookEventName"], "SessionStart")
         self.assertIn("user:preferences", out["hookSpecificOutput"]["additionalContext"])
 
+    # The consolidate nudge lives here, not on PreCompact: that event rejects
+    # hookSpecificOutput.additionalContext, and fires as compaction begins so
+    # the model gets no turn. SessionStart with source=compact fires after.
+    def test_compact_source_adds_the_consolidate_nudge(self):
+        Recorder.get_payload = {"namespaces": [
+            {"namespace": "shared", "summary": "Uses pnpm."}]}
+        r = self.run_script("session-start.sh", {"source": "compact"},
+                            KEMORY_API_KEY="k")
+        ctx = json.loads(r.stdout)["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("kemory_consolidate_session", ctx)
+        self.assertIn("shared", ctx, "summaries must still be injected")
+
+    def test_ordinary_start_has_no_consolidate_nudge(self):
+        Recorder.get_payload = {"namespaces": [
+            {"namespace": "shared", "summary": "Uses pnpm."}]}
+        for source in ("startup", "resume", "clear", ""):
+            with self.subTest(source=source):
+                r = self.run_script("session-start.sh", {"source": source},
+                                    KEMORY_API_KEY="k")
+                ctx = json.loads(r.stdout)["hookSpecificOutput"]["additionalContext"]
+                self.assertNotIn("kemory_consolidate_session", ctx)
+
+    def test_compact_nudge_survives_having_nothing_to_inject(self):
+        # A compaction is worth consolidating whether or not the vault has
+        # summaries to hand back, so an empty context must not swallow it.
+        Recorder.get_payload = {"namespaces": []}
+        r = self.run_script("session-start.sh", {"source": "compact"},
+                            KEMORY_API_KEY="k")
+        self.assertIn("kemory_consolidate_session",
+                      json.loads(r.stdout)["hookSpecificOutput"]["additionalContext"])
+
+    def test_no_precompact_hook_is_registered(self):
+        # PreCompact silently rejected our output on every compaction while
+        # both READMEs advertised the feature. It must not come back.
+        events = json.loads(
+            (ROOT / "plugin" / "hooks" / "hooks.json").read_text())["hooks"]
+        self.assertNotIn("PreCompact", events)
+
     def test_session_start_respects_budget(self):
         Recorder.get_payload = {"namespaces": [
             {"namespace": f"ns{i}", "summary": "S" * 400} for i in range(5)]}
@@ -693,7 +731,7 @@ class FixtureCoverage(unittest.TestCase):
 
     # Events whose payload has not been captured from a live session yet.
     # Removing an entry requires adding the fixture, not editing this set.
-    UNCAPTURED = {"SessionStart"}
+    UNCAPTURED = set()
 
     def test_every_registered_event_has_a_fixture(self):
         events = set(json.loads(

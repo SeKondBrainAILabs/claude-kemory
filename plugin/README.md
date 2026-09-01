@@ -10,7 +10,7 @@ Hooks and a skill that make Claude Code use Kemory memory well.
 | `prompt-recall.sh` | `UserPromptSubmit` | Searches Kemory with your prompt and injects the top matches, so recall happens on every substantive prompt instead of only when the agent thinks to spend a tool call |
 | `recall-approve.sh` | `PreToolUse` on Kemory tools | Auto-approves **read-only** tools so recall costs no permission prompt. Writes still ask, every time |
 | `rate-reminder.sh` | `PostToolUse` on any Kemory recall tool | Reminds the agent to rate memories it actually used, so recall quality improves over time. Fires only when the response is rateable — it carries a `recall_id` or a non-empty result list |
-| inline | `PreCompact` | Reminds the agent to consolidate before context is summarised away |
+| `session-start.sh` | `SessionStart` with `source=compact` | Reminds the agent to consolidate what the pre-compaction context held. Deliberately not `PreCompact`: that event rejects `additionalContext`, and fires as compaction begins so the model gets no turn to act |
 | `capture.sh` | `Stop`, `SessionEnd` | **Opt-in.** Stores new turns as redacted episodic memories as the session goes, so a killed session still leaves its work behind |
 
 Plus:

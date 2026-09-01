@@ -85,7 +85,7 @@ bridge, so setting it points the whole plugin at your instance.
 |------|-------|-----------|
 | context injection | `SessionStart` | Injects your namespace summaries so the agent starts informed instead of blind, and warns once if Kemory isn't set up |
 | rate reminder | `PostToolUse` on Kemory recall tools | Prompts the agent to rate the memories it actually used, so recall quality improves instead of silently decaying |
-| consolidate reminder | `PreCompact` | Prompts the agent to store durable facts before context is summarised away |
+| consolidate reminder | `SessionStart` after a compaction | Prompts the agent to store durable facts that would otherwise survive only as a summary |
 | session capture | `SessionEnd` | **Opt-in.** Stores a bounded, redacted digest of what the session was about |
 
 Plus `/kemory:status` for checking your setup, and a `kemory` skill covering

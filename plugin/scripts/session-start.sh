@@ -10,6 +10,12 @@
 set -uo pipefail
 [ "${KEMORY_CONTEXT:-1}" = "1" ] || exit 0
 
+# The hook payload carries `source`: startup | resume | clear | compact.
+# "compact" is the only channel that can nudge consolidation -- PreCompact
+# itself rejects hookSpecificOutput.additionalContext outright, and runs as
+# compaction begins, so the model would get no turn to act on it anyway.
+PAYLOAD="$(cat 2>/dev/null || true)"
+
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib.sh disable=SC1091
 . "$DIR/lib.sh"
@@ -41,6 +47,7 @@ RESP="$(curl -s --max-time "${KEMORY_CONTEXT_TIMEOUT:-6}" \
 
 command -v python3 >/dev/null 2>&1 || exit 0
 KEMORY_RESP="$RESP" \
+KEMORY_PAYLOAD="$PAYLOAD" \
 KEMORY_MAX_CHARS="${KEMORY_CONTEXT_MAX_CHARS:-4000}" \
 KEMORY_NAMESPACES="${KEMORY_CONTEXT_NAMESPACES:-}" \
 python3 <<'PY' 2>/dev/null
@@ -51,9 +58,29 @@ try:
 except Exception:
     sys.exit(0)
 
+try:
+    source = (json.loads(os.environ.get("KEMORY_PAYLOAD") or "{}")
+              .get("source") or "")
+except Exception:
+    source = ""
+compacted = source == "compact"
+
+CONSOLIDATE = (
+    "This session was just compacted. Anything established before the "
+    "compaction now exists only as a summary. If this session produced "
+    "durable facts, decisions or solved problems that are not in kemory "
+    "yet, store them now with kemory_consolidate_session (or "
+    "kemory_store_memory for individual facts) before continuing."
+)
+
 namespaces = data.get("namespaces")
 if not isinstance(namespaces, list):
-    # Not the expected shape — most likely an auth error body. Stay silent.
+    # Not the expected shape — most likely an auth error body. Stay silent,
+    # except after a compaction, where the nudge stands on its own.
+    if compacted:
+        print(json.dumps({"hookSpecificOutput": {
+            "hookEventName": "SessionStart",
+            "additionalContext": CONSOLIDATE}}))
     sys.exit(0)
 
 wanted = {n.strip() for n in os.environ["KEMORY_NAMESPACES"].split(",") if n.strip()}
@@ -69,6 +96,10 @@ for ns in namespaces:
     lines.append(f"- [{name}] {summary}")
 
 if not lines:
+    if compacted:
+        print(json.dumps({"hookSpecificOutput": {
+            "hookEventName": "SessionStart",
+            "additionalContext": CONSOLIDATE}}))
     sys.exit(0)
 
 budget = max(500, int(os.environ["KEMORY_MAX_CHARS"]))
@@ -91,6 +122,8 @@ if truncated:
         f"\n\n({len(lines) - len(body)} more namespace summaries omitted to stay "
         "within the context budget; raise KEMORY_CONTEXT_MAX_CHARS to include them.)"
     )
+if compacted:
+    context += "\n\n" + CONSOLIDATE
 context += (
     "\n\nRecall details with kemory_recall_memory / kemory_get_context before "
     "re-deriving anything, and rate what you use with kemory_rate_memory."

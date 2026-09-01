@@ -3,6 +3,34 @@
 All notable changes to this project are documented here. This project follows
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.1] — 2026-09-01
+
+### Fixed
+- **The consolidate reminder had never fired, on any version.** `PreCompact`
+  does not accept `hookSpecificOutput.additionalContext` — the harness rejects
+  the output with `Hook JSON output validation failed` and prints that error to
+  the user on every compaction — while both READMEs advertised the feature.
+  Third instance of the same root cause as 0.1.3 and 0.2.0: a hook written
+  against an assumed payload contract.
+
+  The hook is removed rather than repaired. Even with valid output `PreCompact`
+  fires as compaction begins, so the model gets no turn to act on it. The nudge
+  moved to `SessionStart` with `source=compact`, which fires after compaction
+  and does accept `additionalContext`. It is emitted even when there are no
+  namespace summaries to inject, since a compaction is worth consolidating
+  either way.
+
+### Added
+- Captured `SessionStart`, `PreCompact` and `SessionEnd` payloads as fixtures,
+  completing the set: every registered hook event now has a real payload behind
+  it, and a test fails when one does not. The exemption list is empty.
+  `PreCompact`'s fixture is kept although the event is no longer registered —
+  it is the evidence for why.
+- `session_title` and `source` are now known `SessionStart` fields; `source`
+  was observed as `resume`. `PreCompact` carries `trigger` and
+  `custom_instructions`; `SessionEnd` carries `reason`, seen as `other` on a
+  normal exit.
+
 ## [0.2.0] — 2026-08-31
 
 ### Added
