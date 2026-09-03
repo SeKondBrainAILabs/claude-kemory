@@ -168,6 +168,23 @@ secret patterns redacted. See [plugin/README.md](plugin/README.md) for all
 configuration and [SECURITY.md](SECURITY.md) for what redaction does and
 does not guarantee.
 
+### Which surfaces this works on
+
+Claude Code runs in four places, and the Quickstart above applies to three of
+them: the **terminal**, the **Desktop app**, and the **IDE extensions**.
+
+**Claude Code on the web** (`claude.ai/code`) is the exception. Per the Claude
+Code docs, commands that only run in the terminal interface — `/plugin` among
+them — aren't available in cloud sessions, so steps 1 and 2 above cannot be
+run there. Whether a repo-committed `.claude/settings.json` can load the plugin
+instead is untested; if you try it, note that `kemory login` won't work in a
+cloud VM (no browser, and the VM is reclaimed on expiry), so the hooks would
+need `KEMORY_API_KEY` set as a cloud-environment variable, and the
+environment's network access would have to permit the Kemory API.
+
+**claude.ai chat** has no plugin or hook system at all — use the Kemory
+connector there for the memory tools.
+
 ## Other agents
 
 This repo is the **Claude Code** integration. Cursor and Codex have plugin

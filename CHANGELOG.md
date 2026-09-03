@@ -3,6 +3,21 @@
 All notable changes to this project are documented here. This project follows
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.7] — 2026-09-01
+
+### Added
+- **Which Claude surfaces this works on, stated for the first time.** The
+  Quickstart applies to the terminal, the Desktop app and the IDE extensions.
+  It does **not** work in **Claude Code on the web**: per the Claude Code docs,
+  commands that only run in the terminal interface — `/plugin` among them —
+  aren't available in cloud sessions, so `/plugin marketplace add` and
+  `/plugin install` cannot be run there. Whether a repo-committed
+  `.claude/settings.json` loads the plugin instead is untested and documented
+  as such, along with the two conditions that would apply anyway: `kemory login`
+  cannot work in a cloud VM, and the environment's egress would have to permit
+  the Kemory API. **claude.ai chat** has no plugin or hook system at all and is
+  connector-only.
+
 ## [0.2.6] — 2026-09-01
 
 Two defects found by actually walking the install on a machine with no CLI and
