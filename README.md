@@ -135,7 +135,7 @@ bridge, so setting it points the whole plugin at your instance.
 | prompt recall | `UserPromptSubmit` | Searches your vault with the prompt you just typed and injects what matches, so relevant history arrives without you asking for it |
 | rate reminder | `PostToolUse` on Kemory recall tools | Prompts the agent to rate the memories it actually used, so recall quality improves instead of silently decaying |
 | consolidate reminder | `SessionStart` after a compaction | Prompts the agent to store durable facts that would otherwise survive only as a summary |
-| session capture | `SessionEnd` | **Opt-in.** Stores a bounded, redacted digest of what the session was about |
+| session capture | `Stop`, `SessionEnd` | **Opt-in.** Stores a bounded, redacted digest of what the session was about |
 
 Plus `/kemory:status` for checking your setup, a `kemory` skill covering
 how to recall, rate, store, and phrase memories so semantic search can find
@@ -222,17 +222,23 @@ With no credential configured at all, every hook no-ops and nothing is sent.
 ### Storage, retention and deletion
 
 What you send is stored as memories in your own vault, scoped to your
-organisation and user, and encrypted at rest. Memories persist until you
-remove them — there is no automatic expiry unless you set a TTL when storing.
-Delete them with the `kemory_delete_memory` and `kemory_forget` tools, or drop
-the whole vault from your Kemory account.
+organisation and user. Encryption at rest is **opt-in per account** and off
+until you enable it. Memories persist until you remove them — there is no
+automatic expiry unless you set a TTL when storing. Delete them with the
+`kemory_delete_memory` and `kemory_forget` tools, or write to the contact
+address below for account-level deletion.
 
 ### Who else can see it
 
 Memories default to `user-private` and are isolated per organisation; nothing
 crosses to another organisation. You can widen a memory to `team` or
-`org-public` yourself. Vault content is not sold and not shared with third
-parties.
+`org-public` yourself.
+
+The hosted service generates the namespace summaries that context injection
+reads by sending memory content to a third-party model provider (currently
+Groq). Embeddings are computed with a local model and do not leave the
+service. On a self-hosted instance both are whatever you configured. The
+hosted service's own terms govern its sub-processors; this plugin adds none.
 
 One thing to be aware of: injected context becomes part of your Claude Code
 conversation, so it reaches Anthropic on the same terms as anything else you
