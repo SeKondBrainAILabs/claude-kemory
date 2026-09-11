@@ -1,68 +1,57 @@
 ---
 name: kemory-setup
-description: Get Kemory connected after installing the plugin, or diagnose it when the kemory_* tools are missing, the bundled MCP server fails to start, or context injection is silent. Load when the user installs this plugin, asks how to set Kemory up, or reports that Kemory is not working.
+description: Get Kemory connected after installing the plugin, or diagnose it when the kemory_* tools are missing, the MCP server is unauthorised, or context injection is silent. Load when the user installs this plugin, asks how to set Kemory up, or reports that Kemory is not working.
 ---
 
 # Connecting Kemory
 
-The plugin ships two halves that authenticate **separately**: the `kemory_*`
-MCP tools, and the hooks that make the agent use them. One can work while the
-other is dead, so check both.
+Run `/kemory:status` first. It reports on both halves of the plugin and names
+the specific failure; the steps below act on what it says.
 
-Run `/kemory:status` first — it reports on both halves and names the specific
-failure. Use the steps below to act on what it says.
+## One variable turns on everything
 
-## The bundled MCP server needs the CLI
-
-`plugin/.mcp.json` runs `kemory mcp serve`. If the `kemory` binary is not on
-`PATH`, that server fails to start and the `kemory_*` tools never appear.
-Check with `command -v kemory`.
-
-Two ways out — pick one:
-
-**Install the CLI.** Homebrew wraps prebuilt binaries:
+The bundled MCP entry talks to hosted Kemory over HTTP and reads
+`KEMORY_API_KEY` from the environment. The hooks read the same variable. So a
+single export authenticates both halves, and there is nothing to install:
 
 ```bash
-brew install sekondbrainailabs/s9n/kemory
+export KEMORY_API_KEY="..."   # from your Kemory dashboard
 ```
 
-Without Homebrew, take the binary from the same release. It is a bundle — a
-`kemory` launcher beside an `_internal/` directory — so extract it into its own
-directory rather than straight into a `bin`. Substitute `macos-arm64`,
-`macos-x64`, `linux-arm64` or `linux-x64`:
+Put it somewhere your shell loads on startup, then restart the client fully —
+closing the window is not enough.
 
-```bash
-mkdir -p ~/.kemory/lib ~/.local/bin
-curl -fsSL https://github.com/SeKondBrainAILabs/homebrew-s9n/releases/latest/download/kemory-macos-arm64.tar.gz \
-  | tar -xz -C ~/.kemory/lib
-ln -sf ~/.kemory/lib/kemory ~/.local/bin/kemory
-kemory --version
-```
+If the variable is unset, Claude Code warns about the unexpanded
+`${KEMORY_API_KEY}` and the server answers 401. That is the signal: the
+credential is missing, not the server.
 
-**Or reach Kemory another way** and disable the bundled server so two are not
-running: the hosted claude.ai connector, or a remote MCP endpoint at
-`https://<host>/mcp/v1`. Run `/mcp` to see what is actually connected.
+Self-hosted or community edition: set `KEMORY_URL` to your API base, no
+trailing slash and no path. Both the MCP entry and the hooks honour it.
 
-## Then give the hooks a credential
+## If you would rather sign in with a browser
 
-With the CLI, one browser sign-in covers both halves:
+`kemory connect` writes its own MCP entry using the CLI's stored credentials,
+so no key is ever written into a config file:
 
 ```bash
 kemory login
+kemory connect
 ```
 
-Without it, the hooks need an environment variable of their own:
+Do that and **disable the bundled server** so two are not running. Run `/mcp`
+to see what is actually connected. Note the hooks still need
+`KEMORY_API_KEY` — they read the CLI credential file too, but only when one
+exists for the environment you are on.
 
-```bash
-export KEMORY_API_KEY="..."   # from kemory.sekondbrain.ai
-```
+Getting the CLI is a separate step; the root README covers Homebrew and the
+direct download.
+
+## Why the tools can work while nothing else does
 
 **A key inside an MCP config file authenticates the tools and is invisible to
-the hooks.** That is the most common way to end up with working tools and no
-context injection. `/kemory:status` detects it and says so.
-
-Self-hosted or community edition: set `KEMORY_URL` as well — both the hooks and
-the bundled MCP bridge honour it.
+the hooks.** They never read MCP config. That is the most common way to end up
+with working `kemory_*` tools and no context injection. `/kemory:status`
+detects it and says so — export the same key as `KEMORY_API_KEY` to fix it.
 
 ## Confirm, and know what silence means
 

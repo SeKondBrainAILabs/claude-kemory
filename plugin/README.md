@@ -27,10 +27,13 @@ See the [root README](../README.md#quickstart) for the install commands.
 
 ## Connecting Kemory
 
-The plugin bundles a stdio MCP entry that runs `kemory mcp serve`, so
-self-hosted and community-edition users need only `kemory login`. If you
-connect through the hosted claude.ai connector or a remote MCP endpoint
-(`https://<host>/mcp/v1`), disable the bundled server so you do not run two.
+The bundled MCP entry is an HTTP connection to
+`${KEMORY_URL:-https://api.kemory.s9n.ai}/mcp/v1`, sending `KEMORY_API_KEY`
+from the environment as `X-API-Key`. There is no binary to install, and the
+hooks read the same variable, so one export turns on both halves.
+
+If you connect another way — `kemory connect`, the hosted claude.ai connector,
+or your own entry — disable the bundled server so you do not run two.
 
 If no Kemory server is connected, every hook no-ops rather than erroring.
 
@@ -41,9 +44,9 @@ most common source of confusion:
 
 | You have | Tools | Hooks |
 |----------|-------|-------|
-| `kemory login` (CLI) | yes | yes |
+| `KEMORY_API_KEY` in your environment | yes | yes |
+| `kemory login` (CLI), nothing exported | yes | yes |
 | Connector or remote MCP, nothing else | yes | **no** |
-| Connector or remote MCP, plus `KEMORY_API_KEY` in your environment | yes | yes |
 | A key inside an MCP config file | yes | **no** — the hooks never read MCP config |
 
 That last row is worth stating twice: a key in `.mcp.json` or `~/.claude.json`
@@ -121,7 +124,7 @@ export KEMORY_AUTO_CAPTURE=1
 | `KEMORY_CAPTURE_MIN_NEW_TURNS` | `3` | New turns required before a mid-session `Stop` stores anything; `SessionEnd` flushes any remainder |
 | `KEMORY_CAPTURE_SOURCE` | `claude-code` | Value recorded in the memory's `metadata.source` |
 | `KEMORY_ENV` | `prod` | Which credentials file to read |
-| `KEMORY_URL` | `https://api.kemory.sekondbrain.ai` | Override only for a self-hosted or community instance |
+| `KEMORY_URL` | `https://api.kemory.s9n.ai` | Override only for a self-hosted or community instance |
 | `KEMORY_TOKEN` | — | Bearer token, sent as `Authorization: Bearer` |
 | `KEMORY_API_KEY` | — | API key from kemory.sekondbrain.ai, sent as `X-API-Key` |
 

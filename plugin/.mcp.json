@@ -1,7 +1,9 @@
 {
   "kemory": {
-    "command": "kemory",
-    "args": ["mcp", "serve"],
-    "env": {}
+    "type": "http",
+    "url": "${KEMORY_URL:-https://api.kemory.s9n.ai}/mcp/v1",
+    "headers": {
+      "X-API-Key": "${KEMORY_API_KEY}"
+    }
   }
 }

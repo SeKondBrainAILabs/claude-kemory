@@ -22,32 +22,26 @@ they are lost to compaction.
 /plugin install kemory@kemory
 ```
 
-**2. Give it a credential.** Kemory has two halves that authenticate
-*separately*: the `kemory_*` MCP **tools**, and the **hooks** that make the
-agent actually use them.
-
-*With the CLI* — one browser sign-in covers both:
-
-```bash
-kemory login
-```
-
-No keys to copy or paste. See
-[Getting the CLI](#getting-the-cli-with-or-without-homebrew) — Homebrew is one
-option, not a requirement.
-
-*Without the CLI* — if you already reach Kemory through the connector, a custom
-MCP endpoint, or self-hosted, you have the tools; give the hooks a key of their
-own:
+**2. Give it a credential.** One environment variable turns on both halves —
+the bundled MCP entry reads it, and so do the hooks:
 
 ```bash
 export KEMORY_API_KEY="..."   # from kemory.sekondbrain.ai
 ```
 
-It must be an environment variable. **A key inside an MCP config file
-authenticates the tools and is invisible to the hooks** — the most common way
+Put it where your shell loads it on startup, then restart the client fully.
+Nothing to install: the bundled entry talks to hosted Kemory over HTTP.
+
+It must be an environment **variable**. A key inside an MCP config file
+authenticates the *tools* and is invisible to the *hooks* — the most common way
 to end up with working tools and nothing else. `/kemory:status` detects that
 case and says so.
+
+*Prefer a browser login?* `kemory login && kemory connect` writes its own MCP
+entry from the CLI's stored credentials, with no key in any config file.
+Disable the bundled server if you do, so you are not running two. See
+[Getting the CLI](#getting-the-cli-with-or-without-homebrew) — Homebrew is one
+option, not a requirement.
 
 **3. Confirm it works.**
 
@@ -144,16 +138,17 @@ Kemory when something is not working.
 
 ## Connecting Kemory
 
-The plugin bundles a stdio MCP entry that runs `kemory mcp serve`, so it needs
-the `kemory` binary on your `PATH` — without it that server fails to start and
-the `kemory_*` tools never appear. If you connect another way — the hosted claude.ai
-connector, or a remote MCP endpoint at `https://<host>/mcp/v1` — disable the
-bundled server so you are not running two. Run `/mcp` to see what is
-connected.
+The bundled MCP entry is an HTTP connection to `api.kemory.s9n.ai/mcp/v1`
+carrying `KEMORY_API_KEY` from your environment — no binary, nothing to
+install. `KEMORY_URL` repoints it at a self-hosted or community instance, and
+the hooks honour the same variable, so one setting moves the whole plugin.
 
-Hooks authenticate independently of MCP: they use the CLI's stored
-credentials, or `KEMORY_URL` with `KEMORY_TOKEN` (hosted) or `KEMORY_API_KEY`
-(community edition).
+If you connect another way — `kemory connect`, the hosted claude.ai connector,
+or your own remote MCP entry — disable the bundled server so you are not
+running two. Run `/mcp` to see what is connected.
+
+The hooks never read MCP config. They take `KEMORY_API_KEY` or `KEMORY_TOKEN`
+from the environment, or the CLI's stored credentials.
 
 If no Kemory server is connected, every hook no-ops rather than erroring.
 
@@ -300,7 +295,7 @@ same script plus shellcheck.
 .claude-plugin/marketplace.json   marketplace manifest
 plugin/
 ├── .claude-plugin/plugin.json
-├── .mcp.json                     bundled stdio MCP server
+├── .mcp.json                     bundled HTTP MCP entry
 ├── hooks/hooks.json
 ├── skills/kemory/SKILL.md       using memory well
 ├── skills/setup/SKILL.md        connecting Kemory, and diagnosing it

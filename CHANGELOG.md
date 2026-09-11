@@ -18,6 +18,21 @@ Closes the gaps that would have failed a Claude plugin directory review
   appear. The skill walks installing the CLI, or reaching Kemory another way and
   disabling the bundled server, then giving the hooks their own credential.
 
+### Changed
+- **The bundled MCP entry is now an HTTP connection, not a stdio binary.** It
+  was `kemory mcp serve`, which needs the CLI on `PATH` — so on a machine
+  without it the server failed to start and the `kemory_*` tools never
+  appeared. It is now
+  `${KEMORY_URL:-https://api.kemory.s9n.ai}/mcp/v1` with `KEMORY_API_KEY` as
+  `X-API-Key`, which is what the Kemory docs have always told people to paste
+  by hand. Nothing to install, and because the hooks already read
+  `KEMORY_API_KEY`, one export now turns on both halves instead of two
+  credentials doing one job each. `kemory login` plus `kemory connect` remains
+  the browser-login path; disable the bundled server if you use it.
+- **`api.kemory.s9n.ai` is the canonical API host.** The default was
+  `api.kemory.sekondbrain.ai` while the credential-retargeting path in
+  `lib.sh` already rewrote retired hosts *to* `api.kemory.s9n.ai`. Aligned.
+
 ### Fixed
 - **Prompt recall was undocumented in the capability table** despite being on by
   default and sending the text of every prompt to the search endpoint. It is now
