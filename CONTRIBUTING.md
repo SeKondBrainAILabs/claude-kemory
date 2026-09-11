@@ -1,6 +1,7 @@
 # Contributing
 
-Thanks for helping improve the Kemory plugin.
+Thanks for helping improve the Kemory plugin. By taking part you agree to the
+[Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Ground rules
 
