@@ -1,0 +1,75 @@
+name: release
+
+# Tags and releases the plugin when a version bump reaches main, and does
+# nothing otherwise. Version is read from plugin.json; check.sh guarantees
+# marketplace.json agrees and that the value is X.Y.Z, so the tag name here is
+# always well-formed.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+# Two merges in quick succession must not race to create the same tag.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version and decide whether to release
+        id: v
+        run: |
+          set -euo pipefail
+          version=$(jq -re '.version' plugin/.claude-plugin/plugin.json)
+          marketplace=$(jq -re '.plugins[0].version' .claude-plugin/marketplace.json)
+          if [ "$version" != "$marketplace" ]; then
+            echo "::error::plugin.json ($version) and marketplace.json ($marketplace) disagree"
+            exit 1
+          fi
+          # Ask the remote rather than trusting the local tag set: checkout does
+          # not fetch tags by default, and an absent tag would look like "not
+          # released yet" and tag an old commit a second time.
+          if git ls-remote --exit-code --tags origin "refs/tags/v$version" >/dev/null 2>&1; then
+            echo "v$version is already released; nothing to do."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+
+      - name: Extract this version's changelog section
+        if: steps.v.outputs.release == 'true'
+        run: |
+          set -euo pipefail
+          awk -v v="${{ steps.v.outputs.version }}" '
+            $0 ~ "^## \\[" v "\\]" { found = 1; next }
+            found && /^## \[/       { exit }
+            found                   { print }
+          ' CHANGELOG.md > release-notes.md
+          # A release whose body is empty means the changelog was not updated,
+          # which is worth failing on rather than publishing a blank release.
+          if [ ! -s release-notes.md ]; then
+            echo "::error::CHANGELOG.md has no section for ${{ steps.v.outputs.version }}"
+            exit 1
+          fi
+          cat release-notes.md
+
+      - name: Tag and publish
+        if: steps.v.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.v.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "$TAG"
+          git push origin "$TAG"
+          gh release create "$TAG" --title "$TAG" --notes-file release-notes.md

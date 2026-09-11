@@ -57,6 +57,19 @@ while IFS= read -r m; do
   if [ -d "${p#./}" ]; then echo "  ok   $m -> $p"; else echo "  FAIL $m -> $p"; fail=1; fi
 done < <(find . -name 'marketplace.json' -not -path './.git/*')
 
+echo "→ manifests agree on version"
+pver=$(jq -r '.version' plugin/.claude-plugin/plugin.json)
+mver=$(jq -r '.plugins[0].version' .claude-plugin/marketplace.json)
+if [ "$pver" != "$mver" ]; then
+  echo "  FAIL plugin.json $pver != marketplace.json $mver"; fail=1
+elif ! printf '%s' "$pver" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+  # release.yml turns this into the tag name, so a non-semver value would
+  # either produce a junk tag or fail the release after main has already moved.
+  echo "  FAIL version '$pver' is not X.Y.Z"; fail=1
+else
+  echo "  ok   $pver"
+fi
+
 echo "→ hooks reference existing scripts"
 while IFS= read -r s; do
   s="${s/\$\{CLAUDE_PLUGIN_ROOT\}/plugin}"
