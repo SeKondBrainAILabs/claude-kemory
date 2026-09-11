@@ -190,10 +190,15 @@ connector there for the memory tools.
 
 ## Privacy Policy
 
-The plugin is a client. It sends data to one place: the Kemory instance you
-point it at — [kemory.sekondbrain.ai](https://kemory.sekondbrain.ai) for the
-hosted service, or your own host if you set `KEMORY_URL`. No telemetry, no
-analytics, no third-party endpoint.
+The service is governed by the
+[SeKondBrain Privacy Policy](https://docs.sekondbrain.ai/legal/privacy/) and
+its [sub-processor list](https://docs.sekondbrain.ai/subprocessors/). This
+section covers the part that policy cannot: what *this plugin* transmits from
+your machine, and when.
+
+The plugin is a client. It sends data to one place — the Kemory instance you
+point it at, hosted or your own via `KEMORY_URL`. It adds no telemetry, no
+analytics and no third-party endpoint of its own.
 
 ### What each hook sends
 
@@ -244,11 +249,12 @@ Memories default to `user-private` and are isolated per organisation; nothing
 crosses to another organisation. You can widen a memory to `team` or
 `org-public` yourself.
 
-The hosted service generates the namespace summaries that context injection
-reads by sending memory content to a third-party model provider (currently
-Groq). Embeddings are computed with a local model and do not leave the
-service. On a self-hosted instance both are whatever you configured. The
-hosted service's own terms govern its sub-processors; this plugin adds none.
+The hosted service builds the namespace summaries that context injection reads
+by sending memory content to an LLM sub-processor — Groq and OpenRunner are
+the ones currently
+[listed](https://docs.sekondbrain.ai/subprocessors/). Embeddings are computed
+with a local model and do not leave the service. On a self-hosted instance
+both are whatever you configured. The plugin itself adds no sub-processor.
 
 One thing to be aware of: injected context becomes part of your Claude Code
 conversation, so it reaches Anthropic on the same terms as anything else you
@@ -262,8 +268,10 @@ content. The plugin never writes credentials anywhere and never logs them.
 
 ### Contact
 
-Privacy and data questions: **security@sekondbrain.ai**. Same address for
-vulnerability reports — see [SECURITY.md](SECURITY.md).
+Privacy and data questions: **privacy@sekondbrain.ai**, the contact named in
+the [published policy](https://docs.sekondbrain.ai/legal/privacy/).
+Vulnerabilities go to **security@sekondbrain.ai** — see
+[SECURITY.md](SECURITY.md).
 
 ## Other agents
 

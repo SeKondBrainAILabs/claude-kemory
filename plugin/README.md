@@ -171,4 +171,6 @@ build the summaries context injection reads; a self-hosted instance uses
 whatever you configured. Full policy — retention, deletion, who can see what,
 local files — in the
 [repository README](https://github.com/SeKondBrainAILabs/claude-kemory#privacy-policy).
-Privacy questions: **security@sekondbrain.ai**.
+The service itself is governed by the
+[SeKondBrain Privacy Policy](https://docs.sekondbrain.ai/legal/privacy/).
+Privacy questions: **privacy@sekondbrain.ai**.
