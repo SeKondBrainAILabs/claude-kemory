@@ -150,3 +150,19 @@ guarantee. If you work with sensitive material, leave capture off.
 
 Every hook is best-effort: missing credentials, an unreachable server, or a
 malformed transcript all exit cleanly and never block a session.
+
+## Privacy Policy
+
+Everything this plugin sends goes to the Kemory instance you configured and
+nowhere else — no telemetry, no analytics, no third party. Two hooks transmit
+anything at all: **prompt recall**, which is on by default and sends the text
+of your prompt as a search query, and **session capture**, which is off by
+default and sends your own turns. Both are switched off with
+`KEMORY_PROMPT_RECALL=0` and `KEMORY_AUTO_CAPTURE=0`. Context injection sends
+only your credential; the recall-approval and rate-reminder hooks make no
+network calls at all.
+
+Stored content lives in your own vault, encrypted at rest, scoped to your
+organisation and user, and persists until you delete it. Full policy —
+retention, deletion, who can see what, local files, contact —
+in the [repository README](https://github.com/SeKondBrainAILabs/claude-kemory#privacy-policy).

@@ -132,18 +132,21 @@ bridge, so setting it points the whole plugin at your instance.
 | Hook | Event | Behaviour |
 |------|-------|-----------|
 | context injection | `SessionStart` | Injects your namespace summaries so the agent starts informed instead of blind, and warns once if Kemory isn't set up |
+| prompt recall | `UserPromptSubmit` | Searches your vault with the prompt you just typed and injects what matches, so relevant history arrives without you asking for it |
 | rate reminder | `PostToolUse` on Kemory recall tools | Prompts the agent to rate the memories it actually used, so recall quality improves instead of silently decaying |
 | consolidate reminder | `SessionStart` after a compaction | Prompts the agent to store durable facts that would otherwise survive only as a summary |
 | session capture | `SessionEnd` | **Opt-in.** Stores a bounded, redacted digest of what the session was about |
 
-Plus `/kemory:status` for checking your setup, and a `kemory` skill covering
+Plus `/kemory:status` for checking your setup, a `kemory` skill covering
 how to recall, rate, store, and phrase memories so semantic search can find
-them again.
+them again, and a `kemory-setup` skill that walks the agent through connecting
+Kemory when something is not working.
 
 ## Connecting Kemory
 
-The plugin bundles a stdio MCP entry that runs `kemory mcp serve`, which
-covers CLI users. If you connect another way — the hosted claude.ai
+The plugin bundles a stdio MCP entry that runs `kemory mcp serve`, so it needs
+the `kemory` binary on your `PATH` — without it that server fails to start and
+the `kemory_*` tools never appear. If you connect another way — the hosted claude.ai
 connector, or a remote MCP endpoint at `https://<host>/mcp/v1` — disable the
 bundled server so you are not running two. Run `/mcp` to see what is
 connected.
@@ -185,6 +188,67 @@ environment's network access would have to permit the Kemory API.
 **claude.ai chat** has no plugin or hook system at all — use the Kemory
 connector there for the memory tools.
 
+## Privacy Policy
+
+The plugin is a client. It sends data to one place: the Kemory instance you
+point it at — [kemory.sekondbrain.ai](https://kemory.sekondbrain.ai) for the
+hosted service, or your own host if you set `KEMORY_URL`. No telemetry, no
+analytics, no third-party endpoint.
+
+### What each hook sends
+
+| Hook | Event | What leaves your machine | Default |
+|------|-------|--------------------------|---------|
+| context injection | `SessionStart` | Your credential only; reads your namespace summaries back | on |
+| prompt recall | `UserPromptSubmit` | **The text of your prompt**, as a search query | on |
+| recall approval | `PreToolUse` | Nothing — runs entirely locally | on |
+| rate reminder | `PostToolUse` | Nothing — runs entirely locally | on |
+| session capture | `Stop`, `SessionEnd` | Your own prompts: last 12 turns, 8000 characters max, redacted | **off** |
+
+Prompt recall skips prompts under 12 characters and any prompt starting with
+`/`, `!` or `#`, so slash commands are never sent. Separately, when a stored
+OAuth token has expired the hooks refresh it against the identity provider
+named in the CLI's own credential file.
+
+### Turning transmission off
+
+```bash
+export KEMORY_PROMPT_RECALL=0   # stop sending prompt text
+export KEMORY_AUTO_CAPTURE=0    # capture, already the default
+```
+
+With no credential configured at all, every hook no-ops and nothing is sent.
+
+### Storage, retention and deletion
+
+What you send is stored as memories in your own vault, scoped to your
+organisation and user, and encrypted at rest. Memories persist until you
+remove them — there is no automatic expiry unless you set a TTL when storing.
+Delete them with the `kemory_delete_memory` and `kemory_forget` tools, or drop
+the whole vault from your Kemory account.
+
+### Who else can see it
+
+Memories default to `user-private` and are isolated per organisation; nothing
+crosses to another organisation. You can widen a memory to `team` or
+`org-public` yourself. Vault content is not sold and not shared with third
+parties.
+
+One thing to be aware of: injected context becomes part of your Claude Code
+conversation, so it reaches Anthropic on the same terms as anything else you
+type there.
+
+### Local files
+
+`~/.kemory/.captured/` holds per-session digest hashes for de-duplication and
+`~/.kemory/.setup-hint` holds a timestamp. Neither contains conversation
+content. The plugin never writes credentials anywhere and never logs them.
+
+### Contact
+
+Privacy and data questions: **security@sekondbrain.ai**. Same address for
+vulnerability reports — see [SECURITY.md](SECURITY.md).
+
 ## Other agents
 
 This repo is the **Claude Code** integration. Cursor and Codex have plugin
@@ -214,7 +278,8 @@ plugin/
 ├── .claude-plugin/plugin.json
 ├── .mcp.json                     bundled stdio MCP server
 ├── hooks/hooks.json
-├── skills/kemory/SKILL.md
+├── skills/kemory/SKILL.md       using memory well
+├── skills/setup/SKILL.md        connecting Kemory, and diagnosing it
 └── scripts/{rate-reminder,capture}.sh
 ```
 
