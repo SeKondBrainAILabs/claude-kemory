@@ -163,7 +163,9 @@ only your credential; the recall-approval and rate-reminder hooks make no
 network calls at all.
 
 Stored content lives in your own vault, scoped to your organisation and user,
-and persists until you delete it. Encryption at rest is opt-in per account.
+and persists until you delete it — note that the `kemory_delete_memory` and
+`kemory_forget` tools are soft deletes, and `DELETE /api/v1/user/memory-data`
+is the irreversible one. Encryption at rest is opt-in per account.
 The hosted service sends memory content to a third-party model provider to
 build the summaries context injection reads; a self-hosted instance uses
 whatever you configured. Full policy — retention, deletion, who can see what,

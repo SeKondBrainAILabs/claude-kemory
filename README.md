@@ -224,9 +224,19 @@ With no credential configured at all, every hook no-ops and nothing is sent.
 What you send is stored as memories in your own vault, scoped to your
 organisation and user. Encryption at rest is **opt-in per account** and off
 until you enable it. Memories persist until you remove them — there is no
-automatic expiry unless you set a TTL when storing. Delete them with the
-`kemory_delete_memory` and `kemory_forget` tools, or write to the contact
-address below for account-level deletion.
+automatic expiry unless you set a TTL when storing.
+
+Removal comes at two levels, and the difference matters:
+
+- `kemory_delete_memory` and `kemory_forget` are **soft deletes**. The memory
+  stops being active and stops coming back in recall, but the row remains.
+- `DELETE /api/v1/user/memory-data` is **irreversible erasure**: every memory
+  for your user in that organisation, everything derived from them (session
+  summaries, session digests, the consolidated namespace summary), and your
+  memory encryption key along with it. If your vault was encrypted, destroying
+  that key makes any ciphertext surviving in a backup permanently
+  unrecoverable; if it was never encrypted, this is an ordinary hard delete.
+  The response tells you which of the two you got.
 
 ### Who else can see it
 
