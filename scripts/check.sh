@@ -81,6 +81,16 @@ else
   printf '  FAIL %s\n' "$mcp_report"; fail=1
 fi
 
+# This repo is public, and release.yml copies CHANGELOG.md straight into a
+# published GitHub release. Internal tracker ids and Notion links have reached
+# it more than once. Catch them here rather than after they are indexed.
+echo "→ no internal references in tracked files"
+if leaks=$(git grep -nIE 'S9N-[0-9]+|app\.notion\.com|notion\.so/' -- . ':!scripts/check.sh' 2>/dev/null); then
+  echo "  FAIL internal references found:"; printf '    %s\n' "$leaks"; fail=1
+else
+  echo "  ok   no tracker ids or Notion links"
+fi
+
 echo "→ hooks reference existing scripts"
 while IFS= read -r s; do
   s="${s/\$\{CLAUDE_PLUGIN_ROOT\}/plugin}"

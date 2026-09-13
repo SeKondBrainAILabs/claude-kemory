@@ -5,8 +5,7 @@ All notable changes to this project are documented here. This project follows
 
 ## [0.2.8] — 2026-09-11
 
-Closes the gaps that would have failed a Claude plugin directory review
-(S9N-8482).
+Closes the gaps that would have failed a Claude plugin directory review.
 
 ### Added
 - **A Privacy Policy, which the directory rejects submissions for lacking.**
