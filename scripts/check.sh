@@ -70,6 +70,17 @@ else
   echo "  ok   $pver"
 fi
 
+# This entry is the only thing standing between a user and no memory tools at
+# all, and it is a static file no test exercises. Assert its shape here: a
+# wrong host, a dropped credential header or a changed transport all ship
+# silently otherwise, and the symptom reaches the user, not CI.
+echo "→ bundled MCP entry"
+if mcp_report=$(python3 scripts/check_mcp_entry.py 2>&1); then
+  echo "  ok   $mcp_report"
+else
+  printf '  FAIL %s\n' "$mcp_report"; fail=1
+fi
+
 echo "→ hooks reference existing scripts"
 while IFS= read -r s; do
   s="${s/\$\{CLAUDE_PLUGIN_ROOT\}/plugin}"
