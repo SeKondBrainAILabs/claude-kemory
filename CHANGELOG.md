@@ -3,6 +3,38 @@
 All notable changes to this project are documented here. This project follows
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.9] — 2026-09-13
+
+The repo went public for the plugin directory, which does not accept
+closed-source plugins. Most of this release is the consequence of being read
+by strangers rather than by the people who wrote it.
+
+### Added
+- **`PRIVACY.md`.** The per-hook detail — what leaves your machine, how to
+  switch each transmission off, retention, deletion, who can see what, the
+  local files — now has its own document instead of being a section most
+  readers scrolled past.
+- **`check.sh` asserts the bundled MCP entry.** `plugin/.mcp.json` decides
+  whether a user gets any memory tools, and nothing tested it: replacing it
+  with a bogus endpoint and an empty headers block passed the whole suite. The
+  check covers transport, path, the `${KEMORY_URL:-…}` fallback self-hosted
+  users depend on, an `X-API-Key` that references the variable rather than
+  carrying a literal key, and agreement with the hooks' own default host —
+  the two halves authenticate separately and would otherwise drift onto
+  different servers.
+- **`check.sh` fails on internal tracker ids and Notion links** in tracked
+  files. `release.yml` copies the changelog verbatim into a published release,
+  so a pasted ticket reference reaches the public by itself.
+
+### Changed
+- **The README is a landing page.** It had grown into the whole manual. Install
+  now branches on the four ways you can already be reaching Kemory, because the
+  previous version presented `KEMORY_API_KEY` as universal — wrong for anyone
+  signed in with `kemory login`, and wrong in the other direction for a
+  connector user who has tools but no hook credential. CLI installation defers
+  to the docs rather than being re-explained.
+- **Says how to keep the plugin current**, which nothing did.
+
 ## [0.2.8] — 2026-09-11
 
 Closes the gaps that would have failed a Claude plugin directory review.
