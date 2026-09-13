@@ -5,18 +5,16 @@ All notable changes to this project are documented here. This project follows
 
 ## [0.2.8] — 2026-09-11
 
-Closes the gaps that would have failed a Claude plugin directory review
-(S9N-8482).
+Closes the gaps that would have failed a Claude plugin directory review.
 
 ### Added
 - **A Privacy Policy, which the directory rejects submissions for lacking.**
   States per hook what leaves the machine, where it goes, how to switch each
   transmission off, how long content is kept and how to delete it, who can see
   it, what is written locally, and a contact address.
-- **A `kemory-setup` skill.** The bundled MCP entry runs `kemory mcp serve`, so
-  on a machine without the CLI it fails to start and the `kemory_*` tools never
-  appear. The skill walks installing the CLI, or reaching Kemory another way and
-  disabling the bundled server, then giving the hooks their own credential.
+- **A `kemory-setup` skill.** Walks the agent through getting connected: the one
+  environment variable that authenticates both halves, the browser-login route
+  for anyone who would rather not hold a key, and what a silent session means.
 
 ### Changed
 - **The bundled MCP entry is now an HTTP connection, not a stdio binary.** It

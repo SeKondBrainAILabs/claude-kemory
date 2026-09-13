@@ -599,7 +599,7 @@ class HookTest(unittest.TestCase):
                  "rehydrate_session_sources")
     # kemory_memory is "Save one memory. Friendly alias of kemory_store_memory"
     # — it requires memory:write despite reading like a read. rate_memory is a
-    # write whose rows move an org-level indicator (S9N-7207 / Kemory#851).
+    # write whose rows move an org-level indicator.
     WRITES = ("memory", "store_memory", "store_skill", "capture_session",
               "consolidate_session", "delete_memory", "forget",
               "promote_memory", "resolve_conflict", "rate_memory")

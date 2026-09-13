@@ -56,7 +56,7 @@ READ_ONLY = {
 #   memory, store_memory, store_skill, capture_session, consolidate_session,
 #   delete_memory, forget, promote_memory, resolve_conflict — all writes.
 #   rate_memory — a write whose rows feed scorecard_service._recall_usefulness,
-#   an org-level indicator. Per S9N-7207 / Kemory#851 an unattended agent
+#   an org-level indicator. An unattended agent
 #   writer moving that number is a known failure mode, so a human stays in the
 #   loop even though the write itself is harmless.
 

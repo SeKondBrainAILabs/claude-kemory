@@ -70,6 +70,27 @@ else
   echo "  ok   $pver"
 fi
 
+# This entry is the only thing standing between a user and no memory tools at
+# all, and it is a static file no test exercises. Assert its shape here: a
+# wrong host, a dropped credential header or a changed transport all ship
+# silently otherwise, and the symptom reaches the user, not CI.
+echo "→ bundled MCP entry"
+if mcp_report=$(python3 scripts/check_mcp_entry.py 2>&1); then
+  echo "  ok   $mcp_report"
+else
+  printf '  FAIL %s\n' "$mcp_report"; fail=1
+fi
+
+# This repo is public, and release.yml copies CHANGELOG.md straight into a
+# published GitHub release. Internal tracker ids and Notion links have reached
+# it more than once. Catch them here rather than after they are indexed.
+echo "→ no internal references in tracked files"
+if leaks=$(git grep -nIE 'S9N-[0-9]+|app\.notion\.com|notion\.so/' -- . ':!scripts/check.sh' 2>/dev/null); then
+  echo "  FAIL internal references found:"; printf '    %s\n' "$leaks"; fail=1
+else
+  echo "  ok   no tracker ids or Notion links"
+fi
+
 echo "→ hooks reference existing scripts"
 while IFS= read -r s; do
   s="${s/\$\{CLAUDE_PLUGIN_ROOT\}/plugin}"
