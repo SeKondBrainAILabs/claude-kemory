@@ -23,7 +23,7 @@ Plus:
 
 ## Install
 
-See the [root README](../README.md#quickstart) for the install commands.
+See the [root README](../README.md#install) for the install commands.
 
 ## Connecting Kemory
 
