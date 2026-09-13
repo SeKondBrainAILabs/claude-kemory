@@ -5,180 +5,105 @@ Persistent, cross-session memory for Claude Code, powered by
 open-source [community edition](https://github.com/SeKondBrainAILabs/kemory-community)
 — same wire protocol.
 
-An MCP server gives an agent memory *tools*. This plugin makes it actually
-use them: your context is injected at session start, recalls get rated so
-retrieval improves instead of decaying, and durable facts get stored before
-they are lost to compaction.
+An MCP server gives an agent memory *tools*. This plugin makes it actually use
+them: relevant memories are injected on every prompt, recalls get rated so
+retrieval improves instead of decaying, and a session digest can be stored
+automatically.
 
-## Quickstart
+## Features
 
-**1. Install the plugin.**
+- **Prompt recall** — every prompt is searched against your vault and the
+  matches arrive before the agent answers, without it deciding to look
+- **Context injection** — your namespace summaries load at session start
+- **Rate reminder** — the agent rates the memories it used, so retrieval keeps
+  improving
+- **Session capture** — *opt-in.* A bounded, redacted digest of what the
+  session was about, stored at the end
+- **`/kemory:status`** — one command that says what is and is not working
+
+## Install
 
 ```
 /plugin marketplace add SeKondBrainAILabs/claude-kemory
-```
-
-```
 /plugin install kemory@kemory
 ```
 
-**2. Give it a credential.** One environment variable turns on both halves —
-the bundled MCP entry reads it, and so do the hooks:
+Then give it a credential. What that means depends on how you already reach
+Kemory:
 
-```bash
-export KEMORY_API_KEY="..."   # from kemory.sekondbrain.ai
-```
+| You have | Do this |
+|----------|---------|
+| Nothing yet | `export KEMORY_API_KEY="..."` in your shell profile — key from [kemory.sekondbrain.ai](https://kemory.sekondbrain.ai). The bundled MCP entry and the hooks both read it. |
+| The Kemory CLI, signed in with `kemory login` | Nothing for the hooks — they read the CLI's stored credentials. Run `kemory connect` to write the tools' MCP entry, then disable this plugin's bundled one under `/mcp` so you are not running two. |
+| The claude.ai Kemory connector | Tools already work. The hooks still need `export KEMORY_API_KEY="..."` — the connector's OAuth token lives inside Claude and a shell script cannot read it. Disable the bundled entry under `/mcp`. |
+| A self-hosted or community instance | `export KEMORY_URL=http://...` alongside `KEMORY_API_KEY`. One URL moves the whole plugin. |
 
-Put it where your shell loads it on startup, then restart the client fully.
-Nothing to install: the bundled entry talks to hosted Kemory over HTTP.
-
-It must be an environment **variable**. A key inside an MCP config file
-authenticates the *tools* and is invisible to the *hooks* — the most common way
-to end up with working tools and nothing else. `/kemory:status` detects that
-case and says so.
-
-*Prefer a browser login?* `kemory login && kemory connect` writes its own MCP
-entry from the CLI's stored credentials, with no key in any config file.
-Disable the bundled server if you do, so you are not running two. See
-[Getting the CLI](#getting-the-cli-with-or-without-homebrew) — Homebrew is one
-option, not a requirement.
-
-**3. Confirm it works.**
+Restart Claude Code fully, then:
 
 ```
 /kemory:status
 ```
 
-From the next session your namespace summaries are injected automatically,
-and recalls get rated so retrieval keeps improving.
+The key must be an environment **variable**. A key inside an MCP config file
+authenticates the *tools* and is invisible to the *hooks* — the most common way
+to end up with working tools and nothing else. `/kemory:status` detects that
+case and says so.
 
-<details>
-<summary>Getting the CLI, with or without Homebrew</summary>
-
-Homebrew is a convenience, not a requirement — the tap wraps prebuilt binaries
-published on a GitHub release:
-
-```bash
-brew install sekondbrainailabs/s9n/kemory
-```
-
-Without Homebrew, take the binary directly. The archive is a bundle — a
-`kemory` launcher beside an `_internal/` runtime directory — so extract it into
-its own directory and link the launcher onto your `PATH`. Do **not** unpack it
-straight into a `bin` directory; that scatters 200-plus runtime files across it.
-Replace the platform with one of `macos-arm64`, `macos-x64`, `linux-arm64`,
-`linux-x64`:
-
-```bash
-mkdir -p ~/.kemory/lib ~/.local/bin
-curl -fsSL https://github.com/SeKondBrainAILabs/homebrew-s9n/releases/latest/download/kemory-macos-arm64.tar.gz \
-  | tar -xz -C ~/.kemory/lib
-ln -sf ~/.kemory/lib/kemory ~/.local/bin/kemory
-kemory --version
-```
-
-Windows has a build too — `kemory-windows-x64.zip` on the same release.
-
-**Supported platforms.** The CLI ships for macOS and Linux (arm64, x64) and
-Windows x64. **The plugin's hooks are narrower:** they are `bash` scripts
-calling `curl` and `python3`, so on Windows they need Git Bash or WSL. That
-combination is untested, so Windows is not currently claimed for the hooks even
+Installing and signing in with the CLI:
+[docs.sekondbrain.ai/kemory/cli](https://docs.sekondbrain.ai/kemory/cli/).
+Running your own instance: [kemory-community](https://github.com/SeKondBrainAILabs/kemory-community).
+The hooks are `bash` scripts calling `curl` and `python3`; on Windows they need
+Git Bash or WSL, which is untested, so Windows is not claimed for the hooks even
 though the CLI runs there.
 
-</details>
-
-<details id="connecting-without-the-cli">
-<summary>Connecting without the CLI</summary>
-
-**Already using the Kemory connector?** Adding *Kemory by SeKondBrain* in your
-claude.ai connector settings gives you the memory tools over OAuth, everywhere
-— web, mobile, desktop and Claude Code. Disable this plugin's bundled MCP
-server so you do not run two: two servers means two copies of the same 28
-tools in every request, and `/mcp` shows what is connected.
-
-The hooks are separate from MCP — they call the API directly, so they need
-their own credential. Without one they no-op silently, and you get the tools
-and skill but no context injection and no capture. To enable them alongside
-the connector, set a key from
-[kemory.sekondbrain.ai](https://kemory.sekondbrain.ai):
-
-```bash
-export KEMORY_API_KEY="..."
-```
-
-**Self-hosted / community edition:**
-
-```bash
-git clone https://github.com/SeKondBrainAILabs/kemory-community.git
-cd kemory-community && docker compose -f docker-compose.community.yml up -d --build
-export KEMORY_URL=http://127.0.0.1:8111
-export KEMORY_API_KEY=kemory-community-ci-key
-```
-
-`kemory login --local` skips OAuth and stores a machine-local API key for
-this case. `KEMORY_URL` is honoured by both the hooks and the bundled MCP
-bridge, so setting it points the whole plugin at your instance.
-
-</details>
-
-## What it does
+## How it works
 
 | Hook | Event | Behaviour |
 |------|-------|-----------|
 | context injection | `SessionStart` | Injects your namespace summaries so the agent starts informed instead of blind, and warns once if Kemory isn't set up |
 | prompt recall | `UserPromptSubmit` | Searches your vault with the prompt you just typed and injects what matches, so relevant history arrives without you asking for it |
+| recall approval | `PreToolUse` on Kemory read tools | Auto-approves reads, so memory stops being the thing that interrupts you |
 | rate reminder | `PostToolUse` on Kemory recall tools | Prompts the agent to rate the memories it actually used, so recall quality improves instead of silently decaying |
 | consolidate reminder | `SessionStart` after a compaction | Prompts the agent to store durable facts that would otherwise survive only as a summary |
 | session capture | `Stop`, `SessionEnd` | **Opt-in.** Stores a bounded, redacted digest of what the session was about |
 
-Plus `/kemory:status` for checking your setup, a `kemory` skill covering
-how to recall, rate, store, and phrase memories so semantic search can find
-them again, and a `kemory-setup` skill that walks the agent through connecting
-Kemory when something is not working.
-
-## Connecting Kemory
-
-The bundled MCP entry is an HTTP connection to `api.kemory.s9n.ai/mcp/v1`
-carrying `KEMORY_API_KEY` from your environment — no binary, nothing to
-install. `KEMORY_URL` repoints it at a self-hosted or community instance, and
-the hooks honour the same variable, so one setting moves the whole plugin.
-
-If you connect another way — `kemory connect`, the hosted claude.ai connector,
-or your own remote MCP entry — disable the bundled server so you are not
-running two. Run `/mcp` to see what is connected.
+Plus a `kemory` skill covering how to recall, rate, store, and phrase memories
+so semantic search can find them again, and a `kemory-setup` skill that walks
+the agent through connecting Kemory when something is not working.
 
 The hooks never read MCP config. They take `KEMORY_API_KEY` or `KEMORY_TOKEN`
-from the environment, or the CLI's stored credentials.
+from the environment, or the CLI's stored credentials, against `KEMORY_URL`
+(default: hosted Kemory). With no credential at all, every hook no-ops rather
+than erroring.
 
-If no Kemory server is connected, every hook no-ops rather than erroring.
+## Configuration
 
-## Session capture (opt-in)
-
-Off unless you set it explicitly, because it uploads conversation content:
+Session capture is off unless you set it, because it uploads conversation
+content:
 
 ```bash
 export KEMORY_AUTO_CAPTURE=1
 ```
 
-Captures your own prompts only — assistant replies and tool output are
-skipped — capped at the last 12 turns and 8000 characters, with common
-secret patterns redacted. See [plugin/README.md](plugin/README.md) for all
-configuration and [SECURITY.md](SECURITY.md) for what redaction does and
-does not guarantee.
+It captures your own prompts only — assistant replies and tool output are
+skipped — capped at the last 12 turns and 8000 characters, with common secret
+patterns redacted. Every other knob (`KEMORY_PROMPT_RECALL`, capture window,
+namespaces, `KEMORY_ENV`) is in [plugin/README.md](plugin/README.md);
+[SECURITY.md](SECURITY.md) covers what redaction does and does not guarantee.
 
-### Which surfaces this works on
+## Which surfaces this works on
 
-Claude Code runs in four places, and the Quickstart above applies to three of
+Claude Code runs in four places, and the install above applies to three of
 them: the **terminal**, the **Desktop app**, and the **IDE extensions**.
 
 **Claude Code on the web** (`claude.ai/code`) is the exception. Per the Claude
 Code docs, commands that only run in the terminal interface — `/plugin` among
-them — aren't available in cloud sessions, so steps 1 and 2 above cannot be
-run there. Whether a repo-committed `.claude/settings.json` can load the plugin
-instead is untested; if you try it, note that `kemory login` won't work in a
-cloud VM (no browser, and the VM is reclaimed on expiry), so the hooks would
-need `KEMORY_API_KEY` set as a cloud-environment variable, and the
-environment's network access would have to permit the Kemory API.
+them — aren't available in cloud sessions, so the install cannot be run there.
+Whether a repo-committed `.claude/settings.json` can load the plugin instead is
+untested; if you try it, note that `kemory login` won't work in a cloud VM (no
+browser, and the VM is reclaimed on expiry), so the hooks would need
+`KEMORY_API_KEY` set as a cloud-environment variable, and the environment's
+network access would have to permit the Kemory API.
 
 **claude.ai chat** has no plugin or hook system at all — use the Kemory
 connector there for the memory tools.
@@ -297,9 +222,11 @@ plugin/
 ├── .claude-plugin/plugin.json
 ├── .mcp.json                     bundled HTTP MCP entry
 ├── hooks/hooks.json
-├── skills/kemory/SKILL.md       using memory well
-├── skills/setup/SKILL.md        connecting Kemory, and diagnosing it
-└── scripts/{rate-reminder,capture}.sh
+├── commands/status.md            /kemory:status
+├── skills/kemory/SKILL.md        using memory well
+├── skills/setup/SKILL.md         connecting Kemory, and diagnosing it
+└── scripts/                      session-start, prompt-recall, recall-approve,
+                                  rate-reminder, capture, status, lib, redact
 ```
 
 Apache-2.0. Kemory itself lives at [kemory.sekondbrain.ai](https://kemory.sekondbrain.ai);
