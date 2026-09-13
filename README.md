@@ -56,6 +56,21 @@ The hooks are `bash` scripts calling `curl` and `python3`; on Windows they need
 Git Bash or WSL, which is untested, so Windows is not claimed for the hooks even
 though the CLI runs there.
 
+## Staying current
+
+Plugins do not update themselves. What you installed is a snapshot, and this
+plugin's behaviour lives in its hooks — leave an install alone and it keeps
+running the hook set from the day you ran it, however much has been fixed since.
+
+```
+/plugin update kemory@kemory
+```
+
+It refreshes the marketplace on the way through, so that is the whole command.
+Restart Claude Code afterwards to load the new hooks; the update does not apply
+them to a running session. `/kemory:status` prints the version you are on, and
+[CHANGELOG.md](CHANGELOG.md) says what moved.
+
 ## How it works
 
 | Hook | Event | Behaviour |
