@@ -32,17 +32,24 @@ turn on.
 
 ## Install
 
-Inside Claude Code:
+In a Claude Code **terminal**:
 
 ```
 /plugin marketplace add SeKondBrainAILabs/kemory-plugin
 /plugin install kemory@kemory
+/reload-plugins
+```
+
+`/reload-plugins` is not optional — `/plugin install` says so in its own output,
+and until it runs the plugin's commands do not exist yet. Then:
+
+```
 /kemory:login
 ```
 
-`/kemory:login` prints one link. Open it, approve in the browser, and the
-credential is written for you — nothing to install, nothing to paste. Restart
-Claude Code fully, then run `/kemory:status`.
+It prints one link. Open it, approve in the browser, and the credential is
+written for you — nothing to install, nothing to paste. Restart Claude Code
+fully, then run `/kemory:status`.
 
 It signs you in the same way the Kemory CLI does and writes the same file, so
 if you install the CLI later it finds you already signed in.
@@ -62,9 +69,12 @@ Git Bash or WSL, which is untested.
 
 </details>
 
-Works in the terminal, the Desktop app and the IDE extensions. Claude Code on
-the web has no `/plugin` command, and claude.ai chat has no hooks at all — use
-the Kemory connector there.
+The plugin runs in the terminal, the Desktop app and the IDE extensions — but
+**`/plugin` itself only works in a terminal.** The Desktop app and the IDE
+extensions read the same `~/.claude/plugins`, so install from a terminal (or
+with `claude plugin install kemory@kemory` from a shell) and then restart the
+app fully; they will pick it up. Claude Code on the web cannot install plugins
+at all, and claude.ai chat has no hooks — use the Kemory connector there.
 
 ## Staying current
 

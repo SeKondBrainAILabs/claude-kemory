@@ -3,6 +3,25 @@
 All notable changes to this project are documented here. This project follows
 [Semantic Versioning](https://semver.org/).
 
+## [0.7.1] — 2026-09-14
+
+### Fixed
+- **The README's install block read as three commands to run in a row, and the
+  middle one is missing.** `/plugin install` prints "Run /reload-plugins to
+  apply", and until that runs the plugin's commands do not exist — so following
+  the README literally produced `Unknown command: /kemory:login` on a perfectly
+  good install. Observed on a fresh machine. `/reload-plugins` is now its own
+  step, with the reason, and `/kemory:login` sits after it.
+- **"Works in the terminal, the Desktop app and the IDE extensions" implied
+  `/plugin` works in all three.** It does not: in the Desktop app `/plugin`
+  answers "isn't available in this environment". The plugin itself runs there
+  fine — the Desktop app and the IDE extensions read the same
+  `~/.claude/plugins` — so the fix is to say install from a terminal and restart
+  the app, rather than to imply a command that is not there.
+- The setup skill now names `Unknown command: /kemory:login` as "installed but
+  not loaded yet", so an agent helping a stuck user stops suggesting a command
+  that cannot exist until `/reload-plugins` has run.
+
 ## [0.7.0] — 2026-09-14
 
 ### Changed
