@@ -78,7 +78,7 @@ find_pasted_instruction() {
   local cwd f
   cwd="$(printf '%s' "$PAYLOAD" | python3 -c 'import json,sys; print((json.load(sys.stdin).get("cwd") or ""))' 2>/dev/null)"
   for f in "$HOME/.claude/CLAUDE.md" "${cwd:+$cwd/CLAUDE.md}"; do
-    [ -n "$f" ] && [ -r "$f" ] || continue
+    if [ -z "$f" ] || [ ! -r "$f" ]; then continue; fi
     if grep -qE "$KEMORY_PASTE_MARKS" "$f" 2>/dev/null; then found="$f"; break; fi
   done
   [ -n "$found" ] || return 0
