@@ -23,12 +23,12 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$DIR/lib.sh"
 
 if ! kemory_resolve_auth; then
-  echo "kemory: no credential — set KEMORY_API_KEY, or run 'kemory login'. Using the claude.ai connector instead? Disable this server under /mcp." >&2
+  echo "kemory: no credential — run /kemory:login in Claude Code to sign in with your browser (or set KEMORY_API_KEY for a headless machine). Using the claude.ai connector instead? Disable this server under /mcp." >&2
   exit 1
 fi
 
 if [ "${KEMORY_TOKEN_EXPIRED:-0}" = "1" ]; then
-  echo "kemory: stored token expired and could not be refreshed — run 'kemory login'." >&2
+  echo "kemory: stored token expired and could not be refreshed — run /kemory:login to sign in again." >&2
   exit 1
 fi
 

@@ -5,6 +5,7 @@ These drive the real scripts with synthetic payloads against a local HTTP
 server, so they exercise the shipped code rather than a copy of its logic.
 Run: python3 test/test_hooks.py
 """
+import base64
 import http.server
 import json
 import os
@@ -680,14 +681,17 @@ class HookTest(unittest.TestCase):
         second = self.run_script("session-start.sh", {}, KEMORY_URL="")
         self.assertEqual(second.stdout.strip(), "", "must not nag every session")
 
-    def test_setup_hint_names_an_installable_command(self):
-        # A new user has no CLI, so telling them to run `kemory login` alone is
-        # a dead end — the hint must say how to get it.
+    def test_setup_hint_names_a_runnable_command(self):
+        # A new user has no CLI, so the hint must name something they can run
+        # as-is. It used to have to choose between naming a command they might
+        # not have and a long-lived key pasted into a shell profile; /kemory:login
+        # ships with the plugin, so the hint now has one answer for everyone.
         r = self.run_script("session-start.sh", {}, KEMORY_URL="")
         msg = json.loads(r.stdout)["systemMessage"]
-        self.assertTrue("kemory login" in msg or "KEMORY_API_KEY" in msg,
-                        "the hint must name an action, not just a diagnosis")
-        self.assertIn("kemory login", msg)
+        self.assertIn("/kemory:login", msg,
+                      "the hint must name an action, not just a diagnosis")
+        self.assertNotIn("install", msg.lower().replace("nothing to install", ""),
+                         "the first remedy must not require installing anything")
 
     def test_setup_hint_suppressed_by_flag(self):
         r = self.run_script("session-start.sh", {}, KEMORY_URL="", KEMORY_QUIET_SETUP="1")
@@ -1228,9 +1232,12 @@ class CredentialTest(unittest.TestCase):
         self.assertNotIn("no memory backend", msg)
         self.assertIn("hooks", msg)
 
-    def test_notice_does_not_name_the_cli_when_it_is_absent(self):
-        # A fresh install with no CLI was told to run `kemory login`, with no
-        # way to obtain it. Found by actually walking the install (T4).
+    def test_notice_offers_a_remedy_that_needs_no_install(self):
+        # A fresh install with no CLI was once told to run `kemory login`, with
+        # no way to obtain it (found by walking the install, T4); the fix then
+        # was to lead with KEMORY_API_KEY, a long-lived secret in a shell
+        # profile. Neither is needed now: /kemory:login ships with the plugin,
+        # so the machine without a CLI gets the SAME best answer as one with it.
         e = {k: v for k, v in os.environ.items() if not k.startswith("KEMORY_")}
         e.update({"HOME": self.home, "CLAUDE_PROJECT_DIR": self.home,
                   # A PATH with no kemory on it.
@@ -1238,12 +1245,11 @@ class CredentialTest(unittest.TestCase):
         r = subprocess.run([str(SCRIPTS / "session-start.sh")], input="{}",
                            text=True, capture_output=True, env=e)
         msg = json.loads(r.stdout)["systemMessage"]
-        # `kemory login` may be mentioned, but only as "install the CLI and
-        # run it" -- never as the first remedy on a machine without the CLI.
-        self.assertIn("KEMORY_API_KEY", msg)
-        self.assertIn("install the kemory CLI", msg)
-        self.assertLess(msg.index("KEMORY_API_KEY"), msg.index("kemory login"),
-                        "the reachable remedy must come first")
+        self.assertIn("/kemory:login", msg)
+        self.assertNotIn("install the kemory CLI", msg,
+                         "nothing has to be installed to sign in any more")
+        self.assertNotIn("kemory login", msg.replace("/kemory:login", ""),
+                         "the bare CLI command would be a dead end here")
 
     def test_setup_notice_names_the_mcp_config_without_leaking_the_key(self):
         self.mcp_config({"mcpServers": {"kemory": {
@@ -1611,6 +1617,301 @@ class McpConfigCountTest(unittest.TestCase):
     def test_malformed_config_does_not_break_the_count(self):
         (pathlib.Path(self.home) / ".claude.json").write_text("{not json")
         self.assertEqual(self.count(), 0)
+
+
+class IdpRecorder(http.server.BaseHTTPRequestHandler):
+    """A stand-in Keycloak + Kemory discovery, for the device-flow sign-in."""
+
+    requests: list = []
+    # Each poll pops the next scripted token response; the last one repeats.
+    token_script: list = []
+    device_response: dict = {}
+    device_status: int = 200
+    discovery: dict = {}
+
+    def _json(self, status, body):
+        raw = json.dumps(body).encode()
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(raw)))
+        self.end_headers()
+        self.wfile.write(raw)
+
+    def do_GET(self):
+        if self.path.endswith("/.well-known/oauth-authorization-server"):
+            if IdpRecorder.discovery is None:
+                self._json(404, {})
+            else:
+                self._json(200, IdpRecorder.discovery)
+            return
+        self._json(404, {})
+
+    def do_POST(self):
+        n = int(self.headers.get("Content-Length", 0))
+        form = urllib.parse.parse_qs(self.rfile.read(n).decode())
+        flat = {k: v[0] for k, v in form.items()}
+        IdpRecorder.requests.append((self.path, flat))
+        if self.path.endswith("/auth/device"):
+            self._json(IdpRecorder.device_status, IdpRecorder.device_response)
+            return
+        if self.path.endswith("/token"):
+            step = (IdpRecorder.token_script.pop(0) if len(IdpRecorder.token_script) > 1
+                    else (IdpRecorder.token_script[0] if IdpRecorder.token_script else {}))
+            status, body = step
+            self._json(status, body)
+            return
+        self._json(404, {})
+
+    def log_message(self, *a):
+        pass
+
+
+def _jwt(claims: dict) -> str:
+    """An unsigned JWT — login.py reads the claims, it does not verify them
+    (Kemory does that on every call). Good enough to drive the file write."""
+    def seg(d):
+        raw = json.dumps(d).encode()
+        return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+    return f"{seg({'alg': 'none'})}.{seg(claims)}.sig"
+
+
+class DeviceLoginTest(unittest.TestCase):
+    """`/kemory:login` — the plugin obtaining a credential on its own.
+
+    Until this existed the plugin could only READ a credential, so a user with
+    no CLI and no API key had no route to the one path that carries the hooks.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.srv = http.server.HTTPServer(("127.0.0.1", 0), IdpRecorder)
+        cls.port = cls.srv.server_address[1]
+        threading.Thread(target=cls.srv.serve_forever, daemon=True).start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.srv.shutdown()
+
+    def setUp(self):
+        self.base = f"http://127.0.0.1:{self.port}"
+        IdpRecorder.requests.clear()
+        IdpRecorder.discovery = {"issuer": self.base}
+        IdpRecorder.device_status = 200
+        IdpRecorder.device_response = {
+            "device_code": "dev-code",
+            "user_code": "ABCD-EFGH",
+            "verification_uri": f"{self.base}/device",
+            "verification_uri_complete": f"{self.base}/device?user_code=ABCD-EFGH",
+            "expires_in": 600,
+            "interval": 1,
+        }
+        IdpRecorder.token_script = [(200, self.tokens())]
+        self.home = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.home, ignore_errors=True)
+
+    def tokens(self, **claims):
+        c = {"email": "person@example.com", "org_id": "org-default"}
+        c.update(claims)
+        return {
+            "access_token": _jwt(c),
+            "refresh_token": "refresh-value",
+            "expires_in": 3600,
+        }
+
+    def run_login(self, **env):
+        e = {k: v for k, v in os.environ.items() if not k.startswith("KEMORY_")}
+        e.update({"HOME": self.home, "KEMORY_URL": self.base})
+        e.update(env)
+        return subprocess.run([str(SCRIPTS / "login.sh")], text=True,
+                              capture_output=True, env=e, timeout=60)
+
+    def creds(self, env="prod"):
+        with open(pathlib.Path(self.home) / ".kemory" / f"credentials-{env}") as fh:
+            return json.load(fh)
+
+    def write_creds(self, **over):
+        d = pathlib.Path(self.home) / ".kemory"
+        d.mkdir(parents=True, exist_ok=True)
+        body = {"access_token": "old", "refresh_token": "old-refresh",
+                "org_id": "org-default", "active_org_id": "org-switched-to",
+                "email": "person@example.com", "version": 2}
+        body.update(over)
+        (d / "credentials-prod").write_text(json.dumps(body))
+
+    def test_writes_the_same_shape_the_cli_writes(self):
+        # A CLI installed later must find the user already signed in, which
+        # only holds if every key it reads is present and correct.
+        r = self.run_login()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        c = self.creds()
+        self.assertEqual(sorted(c), [
+            "access_token", "active_org_id", "client_id", "email", "env",
+            "expires_at", "issuer", "kemory_url", "org_id", "refresh_token",
+            "version"])
+        self.assertEqual(c["version"], 2)
+        self.assertEqual(c["client_id"], "kemory-cli")
+        self.assertEqual(c["env"], "prod")
+        self.assertEqual(c["issuer"], self.base)
+        self.assertEqual(c["kemory_url"], self.base)
+        self.assertEqual(c["refresh_token"], "refresh-value")
+        self.assertIsInstance(c["expires_at"], float)
+        self.assertGreater(c["expires_at"], time.time())
+
+    def test_email_and_org_come_from_the_token(self):
+        # Measured against prod: both are access-token claims, so no extra API
+        # call is needed to fill the file.
+        IdpRecorder.token_script = [(200, self.tokens(email="a@b.c", org_id="org-9"))]
+        self.run_login()
+        c = self.creds()
+        self.assertEqual(c["email"], "a@b.c")
+        self.assertEqual(c["org_id"], "org-9")
+
+    def test_a_switched_active_org_survives_signing_in_again(self):
+        # active_org_id is NOT a token claim and is NOT always org_id: `kemory
+        # use` moves it. Overwriting it would silently put the user back in
+        # their default org, which is how memories have landed in the wrong one.
+        self.write_creds()
+        self.run_login()
+        c = self.creds()
+        self.assertEqual(c["active_org_id"], "org-switched-to")
+        self.assertEqual(c["org_id"], "org-default")
+
+    def test_a_first_sign_in_defaults_the_active_org(self):
+        self.run_login()
+        c = self.creds()
+        self.assertEqual(c["active_org_id"], c["org_id"])
+
+    def test_the_credential_file_is_not_world_readable(self):
+        self.run_login()
+        path = pathlib.Path(self.home) / ".kemory" / "credentials-prod"
+        self.assertEqual(oct(path.stat().st_mode & 0o777), "0o600")
+
+    def test_pkce_is_sent(self):
+        # The public client REQUIRES it — a device request without
+        # code_challenge_method is refused outright.
+        self.run_login()
+        device = [f for p, f in IdpRecorder.requests if p.endswith("/auth/device")][0]
+        self.assertEqual(device["code_challenge_method"], "S256")
+        self.assertTrue(device["code_challenge"])
+        token = [f for p, f in IdpRecorder.requests if p.endswith("/token")][0]
+        self.assertTrue(token["code_verifier"], "the verifier must be redeemed")
+        self.assertNotEqual(token["code_verifier"], device["code_challenge"])
+
+    def test_shows_one_clickable_url(self):
+        r = self.run_login()
+        self.assertIn("user_code=ABCD-EFGH", r.stdout)
+
+    def test_falls_back_to_uri_plus_code_when_complete_is_absent(self):
+        IdpRecorder.device_response = dict(IdpRecorder.device_response)
+        IdpRecorder.device_response.pop("verification_uri_complete")
+        r = self.run_login()
+        self.assertIn(f"{self.base}/device", r.stdout)
+        self.assertIn("ABCD-EFGH", r.stdout)
+
+    def test_keeps_waiting_while_authorization_is_pending(self):
+        IdpRecorder.token_script = [
+            (400, {"error": "authorization_pending"}),
+            (400, {"error": "authorization_pending"}),
+            (200, self.tokens()),
+        ]
+        r = self.run_login()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(len([p for p, _ in IdpRecorder.requests
+                              if p.endswith("/token")]), 3)
+
+    def test_backs_off_when_told_to_slow_down(self):
+        IdpRecorder.token_script = [
+            (400, {"error": "slow_down"}),
+            (200, self.tokens()),
+        ]
+        r = self.run_login()
+        self.assertEqual(r.returncode, 0, r.stderr)
+
+    def test_a_declined_sign_in_says_so(self):
+        IdpRecorder.token_script = [(400, {"error": "access_denied"})]
+        r = self.run_login()
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("declined", r.stderr)
+
+    def test_an_expired_link_says_to_run_it_again(self):
+        IdpRecorder.token_script = [(400, {"error": "expired_token"})]
+        r = self.run_login()
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("expired", r.stderr)
+        self.assertIn("again", r.stderr)
+
+    def test_no_credential_is_written_on_failure(self):
+        IdpRecorder.token_script = [(400, {"error": "access_denied"})]
+        self.run_login()
+        self.assertFalse((pathlib.Path(self.home) / ".kemory" / "credentials-prod").exists())
+
+    def test_undiscoverable_issuer_names_the_remedy(self):
+        IdpRecorder.discovery = None
+        r = self.run_login()
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("KEMORY_URL", r.stderr)
+
+    def test_a_refused_device_request_reports_the_reason(self):
+        IdpRecorder.device_status = 400
+        IdpRecorder.device_response = {
+            "error": "invalid_request",
+            "error_description": "Missing parameter: code_challenge_method",
+        }
+        r = self.run_login()
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("code_challenge_method", r.stderr)
+
+    def test_env_selects_the_credential_file(self):
+        # One machine can hold prod and staging logins side by side.
+        r = self.run_login(KEMORY_ENV="staging")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.creds("staging")["env"], "staging")
+        self.assertFalse((pathlib.Path(self.home) / ".kemory" / "credentials-prod").exists())
+
+    def test_the_hooks_can_use_what_the_login_wrote(self):
+        """The whole point: sign in once, and every hook is authenticated.
+
+        This is the join between the two halves — login.py writes the file and
+        lib.sh reads it. A shape that satisfied the file test but not this one
+        would leave a user signed in with inert hooks, which is the failure
+        this feature exists to remove.
+        """
+        self.run_login()
+        e = {k: v for k, v in os.environ.items() if not k.startswith("KEMORY_")}
+        e["HOME"] = self.home
+        script = (f'. "{SCRIPTS}/lib.sh"; kemory_resolve_auth || exit 1; '
+                  'echo "$KEMORY_AUTH_HEADER"; echo "url=$KEMORY_BASE_URL"')
+        r = subprocess.run(["bash", "-c", script], text=True,
+                           capture_output=True, env=e)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("Authorization: Bearer ", r.stdout,
+                      "a file credential must resolve to a bearer token")
+        self.assertIn(f"url={self.base}", r.stdout,
+                      "the hooks must talk to the host the sign-in used")
+
+    def test_the_launcher_serves_once_the_login_has_run(self):
+        # mcp.sh refuses to start without a credential; after signing in it must
+        # stop refusing, or the tools stay missing for exactly the user this
+        # feature is for.
+        before = subprocess.run(
+            [str(SCRIPTS / "mcp.sh")], input="", text=True, capture_output=True,
+            env={**{k: v for k, v in os.environ.items() if not k.startswith("KEMORY_")},
+                 "HOME": self.home, "KEMORY_URL": self.base})
+        self.assertEqual(before.returncode, 1, "no credential yet")
+        self.assertIn("no credential", before.stderr)
+        self.run_login()
+        after = subprocess.run(
+            [str(SCRIPTS / "mcp.sh")], input="", text=True, capture_output=True,
+            env={**{k: v for k, v in os.environ.items() if not k.startswith("KEMORY_")},
+                 "HOME": self.home, "KEMORY_URL": self.base,
+                 "PATH": ":".join(d for d in os.environ.get("PATH", "").split(":")
+                                  if not (pathlib.Path(d) / "kemory").exists())})
+        self.assertNotIn("no credential", after.stderr)
+
+    def test_the_login_hook_is_not_registered_as_a_hook(self):
+        # It is a command the user runs, not something that fires on an event.
+        hooks = json.loads((ROOT / "plugin" / "hooks" / "hooks.json").read_text())
+        self.assertNotIn("login", json.dumps(hooks))
 
 
 class FixtureCoverage(unittest.TestCase):

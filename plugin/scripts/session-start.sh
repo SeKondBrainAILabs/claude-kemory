@@ -211,13 +211,13 @@ emit_setup_hint() {
   if [ -n "$found" ]; then
     msg="Kemory plugin: found an API key in $found, which the hooks cannot read \u2014 they take a credential from the environment or the CLI, not from MCP config. Your memory tools are unaffected. To turn the hooks on, export KEMORY_API_KEY with that same key."
   else
-    # Do not name a command the machine does not have. A fresh install with no
-    # CLI got told to run `kemory login` with no way to obtain it.
-    if command -v kemory >/dev/null 2>&1; then
-      msg="Kemory plugin: the hooks have no credential, so context injection, prompt recall, rating and capture are off. Your MCP memory tools may already be working \u2014 they authenticate separately. To turn the hooks on, run \`kemory login\` (browser sign-in) or export KEMORY_API_KEY."
-    else
-      msg="Kemory plugin: the hooks have no credential, so context injection, prompt recall, rating and capture are off. Your MCP memory tools may already be working \u2014 they authenticate separately. Quickest fix: export KEMORY_API_KEY with a key from kemory.sekondbrain.ai. Or install the kemory CLI and run \`kemory login\` \u2014 see the plugin README for how to get it."
-    fi
+    # One answer, whatever the machine has. This used to branch on whether the
+    # kemory CLI was installed, because naming a command the user cannot run is
+    # worse than naming none -- and the branch without it could only offer a
+    # long-lived key pasted into a shell profile. /kemory:login ships with the
+    # plugin, so there is now a route that is always available and always the
+    # best one.
+    msg="Kemory plugin: the hooks have no credential, so context injection, prompt recall, rating and capture are off. Your MCP memory tools may already be working \u2014 they authenticate separately. Run /kemory:login to sign in with your browser; nothing to install, nothing to paste."
   fi
   # A stale install is worth saying even here. Someone who gets their tools
   # from the connector has no hook credential on purpose, reaches this branch

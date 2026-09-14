@@ -27,33 +27,27 @@ turn on.
 
 ## Install
 
-Get a key from [kemory.sekondbrain.ai](https://kemory.sekondbrain.ai) and put
-it in your shell profile:
-
-```bash
-export KEMORY_API_KEY="..."
-```
-
-Then, inside Claude Code:
+Inside Claude Code:
 
 ```
 /plugin marketplace add SeKondBrainAILabs/claude-kemory
 /plugin install kemory@kemory
+/kemory:login
 ```
 
-Restart Claude Code fully and run `/kemory:status`.
+`/kemory:login` prints one link. Open it, approve in the browser, and the
+credential is written for you — nothing to install, nothing to paste. Restart
+Claude Code fully, then run `/kemory:status`.
 
-The key must be an environment **variable**. A key inside an MCP config file
-authenticates the *tools* and is invisible to the *hooks* — the most common way
-to end up with working tools and nothing else. `/kemory:status` detects that
-case and says so.
+It signs you in the same way the Kemory CLI does and writes the same file, so
+if you install the CLI later it finds you already signed in.
 
 <details>
 <summary>Already reach Kemory another way?</summary>
 
 | You have | Do this |
 |----------|---------|
-| The Kemory CLI, signed in with `kemory login` | Nothing at all — the hooks and the bundled MCP server both read the CLI's stored credentials. `kemory connect` is only needed for other MCP hosts. |
+| The Kemory CLI, signed in with `kemory login` | Nothing at all — that is the same credential `/kemory:login` writes, and both halves read it. `kemory connect` is only needed for other MCP hosts. |
 | The claude.ai Kemory connector | Tools already work; disable the bundled entry under `/mcp` so you are not running two. The hooks still need `export KEMORY_API_KEY="..."` — the connector's OAuth token lives inside Claude and a shell script cannot read it. |
 | A self-hosted or community instance | `export KEMORY_URL=http://...` alongside `KEMORY_API_KEY`. One URL moves the whole plugin. |
 
