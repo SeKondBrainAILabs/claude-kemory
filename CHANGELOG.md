@@ -3,6 +3,24 @@
 All notable changes to this project are documented here. This project follows
 [Semantic Versioning](https://semver.org/).
 
+## [0.7.2] — 2026-09-14
+
+### Fixed
+- **Claude Code and Claude Desktop were never told apart.** The README said
+  "terminal, Desktop app and IDE extensions" and left a reader to guess whether
+  the Claude *chat* app was in that list. It is not: Claude Desktop is a
+  different product with no plugin system and no hooks — MCP tools only, through
+  its own config. A three-row table now says per surface what you get, whether
+  `/plugin` exists there, and how to install; the skill carries the same split so
+  an agent stops answering for the wrong product.
+
+### Notes
+- This shipped a release late. It was committed to the 0.7.1 branch, but that
+  PR's head never advanced past its first commit, so the merge took the
+  `/reload-plugins` fix and left this behind — on the branch, not in main. Worth
+  knowing as a shape: a pushed commit that a PR does not list is invisible to
+  the merge, and the release still goes green.
+
 ## [0.7.1] — 2026-09-14
 
 ### Fixed
@@ -21,6 +39,7 @@ All notable changes to this project are documented here. This project follows
 - The setup skill now names `Unknown command: /kemory:login` as "installed but
   not loaded yet", so an agent helping a stuck user stops suggesting a command
   that cannot exist until `/reload-plugins` has run.
+
 
 ## [0.7.0] — 2026-09-14
 

@@ -26,9 +26,19 @@ afterwards; closing the window is not enough.
 
 **`Unknown command: /kemory:login` means the plugin is installed but not loaded
 yet**, not that the install failed — `/plugin install` prints "Run
-/reload-plugins to apply" and the commands appear only after that. In the
-Desktop app and the IDE extensions there is no `/plugin` at all: install from a
-terminal, then restart the app fully.
+/reload-plugins to apply" and the commands appear only after that.
+
+Check which surface the user is on before answering, because two of the three
+cannot do what the first one does:
+
+- **Claude Code, terminal** — `/plugin` works; `/reload-plugins` after install.
+- **Claude Code, Desktop app or IDE extension** — the plugin runs, but there is
+  no `/plugin`. They install with `claude plugin install kemory@kemory` in a
+  shell and restart the app fully; it reads the same `~/.claude/plugins`.
+- **Claude Desktop, the chat app** — a different product with no plugin system
+  and no hooks at all. Do not send them to `/plugin` or `/kemory:login`; they
+  want `kemory mcp install --host claude-desktop` or the Kemory connector, and
+  they get the memory tools without any of the hooks.
 
 With none of them, the bundled server does not start and says why on stderr.
 `/kemory:status` reports the same thing without reading logs.
