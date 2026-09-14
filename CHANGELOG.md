@@ -21,6 +21,13 @@ All notable changes to this project are documented here. This project follows
 - The setup skill now names `Unknown command: /kemory:login` as "installed but
   not loaded yet", so an agent helping a stuck user stops suggesting a command
   that cannot exist until `/reload-plugins` has run.
+- **Claude Code and Claude Desktop were never told apart.** The README said
+  "terminal, Desktop app and IDE extensions" and left a reader to guess whether
+  the Claude *chat* app was in that list. It is not: Claude Desktop is a
+  different product with no plugin system and no hooks — MCP tools only, through
+  its own config. A three-row table now says per surface what you get, whether
+  `/plugin` exists there, and how to install; the skill carries the same split so
+  an agent stops answering for the wrong product.
 
 ## [0.7.0] — 2026-09-14
 

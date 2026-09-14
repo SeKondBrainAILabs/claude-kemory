@@ -69,12 +69,25 @@ Git Bash or WSL, which is untested.
 
 </details>
 
-The plugin runs in the terminal, the Desktop app and the IDE extensions — but
-**`/plugin` itself only works in a terminal.** The Desktop app and the IDE
-extensions read the same `~/.claude/plugins`, so install from a terminal (or
-with `claude plugin install kemory@kemory` from a shell) and then restart the
-app fully; they will pick it up. Claude Code on the web cannot install plugins
-at all, and claude.ai chat has no hooks — use the Kemory connector there.
+### Which surface you are on
+
+**Claude Code** and **Claude Desktop** are different products, and only one of
+them has plugins at all. The one that trips people is the middle row: the
+plugin works there, the command to manage it does not.
+
+| Surface | Plugin (tools + hooks) | `/plugin` | How to install |
+|---|---|---|---|
+| Claude Code — terminal | yes | yes | `/plugin install kemory@kemory`, then `/reload-plugins` |
+| Claude Code — Desktop app, IDE extensions | yes | **no** | `claude plugin install kemory@kemory` in a shell, then restart the app fully |
+| Claude Desktop (the chat app) | **no plugins, no hooks** | — | `kemory mcp install --host claude-desktop`, or the Kemory connector |
+
+The Desktop app and the IDE extensions read the same `~/.claude/plugins` as the
+terminal, which is why installing from a shell is enough for them.
+
+Claude Desktop is a different application with no plugin system: it takes MCP
+servers through its own config, so you get the memory *tools* there and none of
+the hooks. Claude Code on the web cannot install plugins either, and claude.ai
+chat has no hooks — use the Kemory connector on both.
 
 ## Staying current
 
