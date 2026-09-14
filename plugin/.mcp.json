@@ -1,7 +1,9 @@
 {
-  "kemory": {
-    "command": "${CLAUDE_PLUGIN_ROOT}/scripts/mcp.sh",
-    "args": [],
-    "env": {}
+  "mcpServers": {
+    "kemory": {
+      "command": "${CLAUDE_PLUGIN_ROOT}/scripts/mcp.sh",
+      "args": [],
+      "env": {}
+    }
   }
 }

@@ -1448,6 +1448,17 @@ class McpEntryTest(unittest.TestCase):
                          "the http entry this release replaced must not pass again")
         self.assertIn("http entry", r.stdout)
 
+        # Claude Code reads a bare servers map, so this shape ran for four
+        # releases without complaint — and listed as a plugin with no memory
+        # tools anywhere that expects the standard wrapper.
+        entry.write_text(json.dumps({"kemory": {
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/mcp.sh",
+            "args": [], "env": {}}}))
+        r = guard()
+        self.assertEqual(r.returncode, 1,
+                         "an unwrapped servers map must not pass again")
+        self.assertIn("mcpServers", r.stdout)
+
 
 class StaleVersionNoticeTest(unittest.TestCase):
     """Telling a user their install is behind.

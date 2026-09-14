@@ -21,6 +21,12 @@ user never chose. So:
 What is checked:
 
   * valid JSON, one server named `kemory` — a typo here removes the tools
+  * the servers map sits under a top-level `mcpServers` key. Claude Code reads
+    both shapes, so the bare map worked and nothing here objected — but every
+    other reader of an MCP config expects the wrapper, and one that does not
+    find it reports the plugin as shipping no servers at all. That is how the
+    plugin would list in a third-party marketplace catalogue: hooks, skills, a
+    command, and no memory tools
   * launched via `${CLAUDE_PLUGIN_ROOT}/scripts/mcp.sh`, which exists and is
     executable — the plugin root variable is the only portable path
   * no `type`/`url` — an http entry cannot resolve a credential at launch
@@ -63,9 +69,14 @@ def main() -> None:
     except json.JSONDecodeError as exc:
         fail(f"{ENTRY} is not valid JSON: {exc}")
 
-    server = entry.get("kemory")
+    # Locate the servers map before judging it, so an entry that is wrong in
+    # two ways still reports the reason that matters most.
+    wrapped = entry.get("mcpServers")
+    servers = wrapped if isinstance(wrapped, dict) else entry
+
+    server = servers.get("kemory")
     if not isinstance(server, dict):
-        fail(f"{ENTRY} has no 'kemory' server (found: {', '.join(entry) or 'nothing'})")
+        fail(f"{ENTRY} has no 'kemory' server (found: {', '.join(servers) or 'nothing'})")
 
     for field in ("type", "url"):
         if field in server:
@@ -116,7 +127,15 @@ def main() -> None:
                 "lib.sh, so KEMORY_URL still repoints the whole plugin."
             )
 
-    print("stdio via scripts/mcp.sh, credential resolved at launch by lib.sh")
+    if not isinstance(wrapped, dict):
+        fail(
+            f"{ENTRY} puts the servers at the top level. Claude Code accepts "
+            "that, which is why it shipped, but a reader that expects the "
+            "standard `mcpServers` wrapper sees no servers and lists the "
+            "plugin as having no memory tools. Wrap it."
+        )
+
+    print("stdio via scripts/mcp.sh under mcpServers, credential resolved at launch by lib.sh")
 
 
 if __name__ == "__main__":
