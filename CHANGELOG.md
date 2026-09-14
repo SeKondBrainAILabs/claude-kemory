@@ -3,6 +3,25 @@
 All notable changes to this project are documented here. This project follows
 [Semantic Versioning](https://semver.org/).
 
+## [0.5.1] — 2026-09-14
+
+### Fixed
+- **The bundled MCP entry now sits under `mcpServers`.** `plugin/.mcp.json`
+  held the servers map at the top level. Claude Code reads both shapes, so
+  this worked for every user and nothing in CI objected — but it is not what
+  the rest of the ecosystem reads. A catalogue generator that scans a plugin's
+  `.mcp.json` for the standard wrapper finds no servers and lists the plugin
+  as shipping hooks, skills and a command and no memory tools, which is the
+  whole product. Measured against a third-party marketplace's index
+  generator: 19 of 19 MCP-shipping plugins there use the wrapper, and kemory
+  was the one that generated an empty `mcpServers`.
+
+  No behaviour change for existing installs — same launcher, same credential
+  resolution at launch. `scripts/check_mcp_entry.py` now requires the wrapper
+  so the shape cannot drift back, and locates the server under either shape
+  first so an entry that is wrong in two ways still reports the transport as
+  the reason.
+
 ## [0.5.0] — 2026-09-14
 
 ### Added
