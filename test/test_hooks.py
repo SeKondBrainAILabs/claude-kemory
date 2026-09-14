@@ -74,6 +74,35 @@ class Recorder(http.server.BaseHTTPRequestHandler):
         pass
 
 
+class McpRecorder(http.server.BaseHTTPRequestHandler):
+    """Stands in for the /mcp/v1 endpoint the bundled bridge relays to."""
+
+    requests: list = []
+    status: int = 200
+    result: dict = {"tools": [{"name": "kemory_recall"}]}
+
+    def do_POST(self):
+        n = int(self.headers.get("Content-Length", 0))
+        raw = self.rfile.read(n)
+        try:
+            body = json.loads(raw or b"{}")
+        except ValueError:
+            body = {}
+        McpRecorder.requests.append((self.headers, body, self.path))
+        self.send_response(McpRecorder.status)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        if McpRecorder.status != 200:
+            self.wfile.write(b'{"detail":"nope"}')
+            return
+        self.wfile.write(json.dumps({
+            "jsonrpc": "2.0", "id": body.get("id"),
+            "result": McpRecorder.result}).encode())
+
+    def log_message(self, *a):
+        pass
+
+
 class HookTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -1221,6 +1250,223 @@ class CredentialTest(unittest.TestCase):
         msg = json.loads(r.stdout)["systemMessage"]
         self.assertIn(".mcp.json", msg)
         self.assertNotIn("kemory_secret", msg)
+
+
+class McpEntryTest(unittest.TestCase):
+    """The bundled MCP server: who serves, and what happens with no credential.
+
+    The entry has been rewritten three times because a static entry can only
+    name one of the three ways a user reaches Kemory, and each rewrite fixed
+    one population by breaking another. These tests pin the property that ends
+    that: the launcher resolves a credential the same way the hooks do, and
+    serves through whichever bridge matches the credential it found.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.srv = http.server.HTTPServer(("127.0.0.1", 0), McpRecorder)
+        cls.port = cls.srv.server_address[1]
+        threading.Thread(target=cls.srv.serve_forever, daemon=True).start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.srv.shutdown()
+
+    def setUp(self):
+        McpRecorder.requests.clear()
+        self.home = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.home, ignore_errors=True)
+        # A stub `kemory` on PATH would be launched with exec, so the CLI branch
+        # is selected by putting one here and asserting on what it prints.
+        self.bindir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.bindir, ignore_errors=True)
+
+    def stub_cli(self, body="echo CLI-BRIDGE-RAN"):
+        p = pathlib.Path(self.bindir) / "kemory"
+        p.write_text("#!/usr/bin/env bash\n" + body + "\n")
+        p.chmod(0o755)
+
+    def env(self, with_cli=False, **extra):
+        e = {k: v for k, v in os.environ.items() if not k.startswith("KEMORY_")}
+        path = os.environ.get("PATH", "/usr/bin:/bin")
+        if with_cli:
+            path = f"{self.bindir}:{path}"
+        else:
+            # Strip any real kemory CLI so the machine running the tests does
+            # not decide which branch is exercised.
+            path = ":".join(d for d in path.split(":")
+                            if not (pathlib.Path(d) / "kemory").exists())
+        e.update({"HOME": self.home, "PATH": path,
+                  "KEMORY_URL": f"http://127.0.0.1:{self.port}"})
+        e.update(extra)
+        return e
+
+    def run_mcp(self, lines, with_cli=False, **extra):
+        return subprocess.run([str(SCRIPTS / "mcp.sh")],
+                              input="".join(l + "\n" for l in lines),
+                              text=True, capture_output=True,
+                              env=self.env(with_cli, **extra))
+
+    def write_creds(self):
+        d = pathlib.Path(self.home) / ".kemory"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "credentials-prod").write_text(json.dumps({
+            "access_token": "tok", "refresh_token": "ref",
+            "expires_at": time.time() + 3600, "client_id": "kemory-cli",
+            "issuer": "https://issuer.invalid/realms/x",
+            "kemory_url": f"http://127.0.0.1:{self.port}"}))
+
+    REQ = '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
+
+    def test_no_credential_exits_nonzero_with_a_reason(self):
+        # The whole point of the rewrite: a server that starts and exposes
+        # nothing looks connected in /mcp while every tool is missing.
+        r = self.run_mcp([self.REQ])
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("no credential", r.stderr)
+        self.assertIn("connector", r.stderr,
+                      "must name the connector case, which is not a misconfiguration")
+        self.assertEqual(r.stdout, "", "a failed launcher must not answer requests")
+
+    def test_environment_credential_serves_through_the_bridge(self):
+        r = self.run_mcp([self.REQ], with_cli=True, KEMORY_API_KEY="env-key")
+        self.assertNotIn("CLI-BRIDGE-RAN", r.stdout,
+                         "an env credential must not be served by the CLI, "
+                         "which reads ~/.kemory and would use another account")
+        reply = json.loads(r.stdout.strip())
+        self.assertEqual(reply["id"], 1)
+        self.assertEqual(reply["result"]["tools"], [{"name": "kemory_recall"}])
+        headers, _, _ = McpRecorder.requests[-1]
+        self.assertEqual(headers.get("X-API-Key"), "env-key",
+                         "the bridge must send the credential lib.sh resolved")
+
+    def test_cli_credential_prefers_the_cli_bridge(self):
+        self.write_creds()
+        self.stub_cli()
+        r = self.run_mcp([self.REQ], with_cli=True)
+        self.assertIn("CLI-BRIDGE-RAN", r.stdout)
+        self.assertEqual(McpRecorder.requests, [],
+                         "the CLI bridge owns the connection; nothing else may relay")
+
+    def test_cli_credential_without_the_cli_falls_back_to_the_bridge(self):
+        self.write_creds()
+        r = self.run_mcp([self.REQ])
+        reply = json.loads(r.stdout.strip())
+        self.assertEqual(reply["result"]["tools"], [{"name": "kemory_recall"}])
+        headers, _, _ = McpRecorder.requests[-1]
+        self.assertEqual(headers.get("Authorization"), "Bearer tok",
+                         "a file credential is a bearer token, not an API key")
+
+    def test_notification_gets_no_reply(self):
+        # Answering a notification is a protocol violation the host may drop
+        # the connection over.
+        r = self.run_mcp(['{"jsonrpc":"2.0","method":"notifications/initialized"}'],
+                         KEMORY_API_KEY="k")
+        self.assertEqual(r.stdout, "")
+        self.assertEqual(len(McpRecorder.requests), 1, "it is still relayed")
+
+    def test_unreachable_api_answers_in_band(self):
+        # A bridge that dies on a transport fault leaves the host waiting on a
+        # request that can never complete.
+        r = self.run_mcp([self.REQ], KEMORY_API_KEY="k",
+                         KEMORY_URL="http://127.0.0.1:1")
+        reply = json.loads(r.stdout.strip())
+        self.assertEqual(reply["id"], 1)
+        self.assertIn("unreachable", reply["error"]["message"])
+
+    def test_rejected_credential_says_so(self):
+        McpRecorder.status = 401
+        self.addCleanup(setattr, McpRecorder, "status", 200)
+        r = self.run_mcp([self.REQ], KEMORY_API_KEY="bad")
+        reply = json.loads(r.stdout.strip())
+        self.assertIn("401", reply["error"]["message"])
+        self.assertIn("kemory login", reply["error"]["message"],
+                      "a 401 must name the remedy, not just the code")
+
+    def test_unparseable_host_line_does_not_kill_the_bridge(self):
+        r = self.run_mcp(["not json", self.REQ], KEMORY_API_KEY="k")
+        first, second = [json.loads(l) for l in r.stdout.strip().splitlines()]
+        self.assertIsNone(first["id"])
+        self.assertEqual(second["id"], 1, "the bridge must keep serving")
+
+    def test_self_hosted_url_is_honoured(self):
+        # KEMORY_URL is the one variable that repoints the whole plugin; the
+        # bridge must not carry a host of its own.
+        r = self.run_mcp([self.REQ], KEMORY_API_KEY="k")
+        self.assertEqual(json.loads(r.stdout.strip())["id"], 1)
+        self.assertTrue(McpRecorder.requests, "went to the configured host")
+
+    def test_entry_guard_rejects_a_static_credential(self):
+        # The guard is what stops a fourth transport rewrite from shipping.
+        import shutil as _shutil
+        work = tempfile.mkdtemp()
+        self.addCleanup(_shutil.rmtree, work, ignore_errors=True)
+        for rel in ("plugin/.mcp.json", "plugin/scripts/mcp.sh",
+                    "plugin/scripts/mcp_bridge.py", "plugin/scripts/lib.sh",
+                    "scripts/check_mcp_entry.py"):
+            dst = pathlib.Path(work) / rel
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            _shutil.copy2(ROOT / rel, dst)
+        entry = pathlib.Path(work) / "plugin/.mcp.json"
+
+        def guard():
+            return subprocess.run(["python3", "scripts/check_mcp_entry.py"],
+                                  cwd=work, text=True, capture_output=True)
+
+        self.assertEqual(guard().returncode, 0, "the shipped entry must pass")
+        entry.write_text(json.dumps({"kemory": {
+            "type": "http",
+            "url": "${KEMORY_URL:-https://api.kemory.s9n.ai}/mcp/v1",
+            "headers": {"X-API-Key": "${KEMORY_API_KEY}"}}}))
+        r = guard()
+        self.assertEqual(r.returncode, 1,
+                         "the http entry this release replaced must not pass again")
+        self.assertIn("http entry", r.stdout)
+
+
+class McpConfigCountTest(unittest.TestCase):
+    """Counting kemory entries already on disk.
+
+    Two entries means two copies of every tool per request, and /mcp lists
+    them without saying they are the same server twice.
+    """
+
+    def setUp(self):
+        self.home = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.home, ignore_errors=True)
+
+    def count(self):
+        e = {k: v for k, v in os.environ.items() if not k.startswith("KEMORY_")}
+        e["HOME"] = self.home
+        e["CLAUDE_PROJECT_DIR"] = self.home
+        r = subprocess.run(
+            ["bash", "-c", f'. "{SCRIPTS}/lib.sh"; kemory_count_mcp_entries'],
+            text=True, capture_output=True, env=e)
+        return int(r.stdout.strip() or -1)
+
+    def write(self, servers, projects=None):
+        blob = {"mcpServers": servers}
+        if projects:
+            blob["projects"] = projects
+        (pathlib.Path(self.home) / ".claude.json").write_text(json.dumps(blob))
+
+    def test_no_configs_is_zero(self):
+        self.assertEqual(self.count(), 0)
+
+    def test_counts_by_name_and_by_url(self):
+        self.write({"kemory": {"type": "http", "url": "https://x/mcp/v1"},
+                    "other": {"url": "https://api.kemory.s9n.ai/mcp/v1"},
+                    "unrelated": {"command": "foo"}})
+        self.assertEqual(self.count(), 2,
+                         "a hand-written entry is often not named 'kemory'")
+
+    def test_counts_per_project_entries(self):
+        self.write({}, projects={"/a": {"mcpServers": {"kemory": {"url": "u"}}}})
+        self.assertEqual(self.count(), 1)
+
+    def test_malformed_config_does_not_break_the_count(self):
+        (pathlib.Path(self.home) / ".claude.json").write_text("{not json")
+        self.assertEqual(self.count(), 0)
 
 
 class FixtureCoverage(unittest.TestCase):

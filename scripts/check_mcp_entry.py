@@ -6,23 +6,33 @@ in this repo looks at it: on 2026-09-12 replacing it with a bogus endpoint and
 an empty headers block passed all 85 tests, so a change that breaks every
 install would go green through CI and fail only on the user's machine.
 
-What is checked, and why each one matters:
+THE INVARIANT, and why it is worth a guard rather than a convention. The entry
+has been rewritten three times — stdio, HTTP, stdio, HTTP — and each rewrite
+fixed one population by breaking another, because a *static* entry can name
+only one of the three ways a user reaches Kemory. stdio-to-the-CLI is dead
+without the binary; an `X-API-Key: ${KEMORY_API_KEY}` header is dead for the
+CLI and connector users who never set that variable, and it makes Claude Code
+send an empty header, get a 401 and fall into an OAuth prompt for a server the
+user never chose. So:
 
-  * valid JSON, one server named `kemory`  — a typo here removes the tools
-  * `type: http`                           — the stdio bridge it replaced
-                                             needed a binary on PATH
-  * url ends `/mcp/v1`                     — the API answers 401 there and 404
-                                             elsewhere, so a wrong path reads
-                                             as an auth problem
-  * url carries a `${KEMORY_URL:-...}`     — self-hosted users repoint the
-    fallback                                 whole plugin with that one
-                                             variable
-  * `X-API-Key: ${KEMORY_API_KEY}`         — the hooks read the same variable;
-                                             a literal key here would also be
-                                             a committed secret
-  * its default host equals the hooks'     — they authenticate separately, and
-    default in lib.sh                        a drift sends the two halves to
-                                             different servers
+    one entry, launched through a script, credential resolved at launch,
+    never a static credential in this file
+
+What is checked:
+
+  * valid JSON, one server named `kemory` — a typo here removes the tools
+  * launched via `${CLAUDE_PLUGIN_ROOT}/scripts/mcp.sh`, which exists and is
+    executable — the plugin root variable is the only portable path
+  * no `type`/`url` — an http entry cannot resolve a credential at launch
+  * NO credential anywhere in the entry: no headers block, no `KEMORY_API_KEY`
+    reference, no literal key. A reference reintroduces the 401/OAuth failure;
+    a literal would be a committed secret
+  * `mcp.sh` sources `lib.sh` and calls `kemory_resolve_auth` — the point of
+    the launcher is that the tools authenticate exactly like the hooks, and a
+    launcher that resolved its own way would drift
+  * `mcp_bridge.py` hardcodes no host — it must take `KEMORY_BASE_URL` from
+    that same resolution, or self-hosted users lose the one variable that
+    repoints the whole plugin
 
 Prints a one-line summary and exits 0, or the reason and exits 1.
 """
@@ -30,20 +40,14 @@ Prints a one-line summary and exits 0, or the reason and exits 1.
 from __future__ import annotations
 
 import json
+import os
 import pathlib
-import re
 import sys
 
 ENTRY = pathlib.Path("plugin/.mcp.json")
-LIB = pathlib.Path("plugin/scripts/lib.sh")
-
-EXPECTED_KEY_REF = "${KEMORY_API_KEY}"
-EXPECTED_PATH = "/mcp/v1"
-# ${KEMORY_URL:-https://api.kemory.s9n.ai}/mcp/v1
-URL_SHAPE = re.compile(r"^\$\{KEMORY_URL:-(?P<default>https://[^}/]+)\}(?P<path>/.*)$")
-LIB_DEFAULT = re.compile(
-    r'^KEMORY_DEFAULT_URL="\$\{KEMORY_DEFAULT_URL:-(?P<default>[^}]+)\}"', re.M
-)
+LAUNCHER = pathlib.Path("plugin/scripts/mcp.sh")
+BRIDGE = pathlib.Path("plugin/scripts/mcp_bridge.py")
+EXPECTED_COMMAND = "${CLAUDE_PLUGIN_ROOT}/scripts/mcp.sh"
 
 
 def fail(message: str) -> None:
@@ -63,44 +67,56 @@ def main() -> None:
     if not isinstance(server, dict):
         fail(f"{ENTRY} has no 'kemory' server (found: {', '.join(entry) or 'nothing'})")
 
-    transport = server.get("type")
-    if transport != "http":
-        fail(f"transport is {transport!r}, expected 'http'")
+    for field in ("type", "url"):
+        if field in server:
+            fail(
+                f"entry carries {field!r}, so it is an http entry. An http entry "
+                "sends a static header, which is dead for anyone who reaches "
+                "Kemory by CLI login or connector. Launch scripts/mcp.sh instead."
+            )
 
-    url = server.get("url", "")
-    shape = URL_SHAPE.match(url)
-    if not shape:
-        fail(
-            f"url {url!r} is not ${{KEMORY_URL:-<https host>}}{EXPECTED_PATH} — "
-            "without that fallback a self-hosted user cannot repoint the plugin"
-        )
-    if shape["path"] != EXPECTED_PATH:
-        fail(f"url path is {shape['path']!r}, expected {EXPECTED_PATH!r}")
+    command = server.get("command")
+    if command != EXPECTED_COMMAND:
+        fail(f"command is {command!r}, expected {EXPECTED_COMMAND!r}")
 
-    headers = server.get("headers") or {}
-    key_ref = headers.get("X-API-Key")
-    if key_ref is None:
+    if not LAUNCHER.is_file():
+        fail(f"{LAUNCHER} does not exist, so the entry launches nothing")
+    if not os.access(LAUNCHER, os.X_OK):
+        fail(f"{LAUNCHER} is not executable, so the entry cannot start")
+
+    if server.get("headers"):
         fail(
-            "no X-API-Key header — the API answers 401 and the user sees no tools "
-            f"(headers: {', '.join(headers) or 'none'})"
-        )
-    if key_ref != EXPECTED_KEY_REF:
-        fail(
-            f"X-API-Key is {key_ref!r}, expected {EXPECTED_KEY_REF!r}. A literal key "
-            "here would be a committed secret and would ignore the user's own."
+            "entry has a headers block. The credential is resolved at launch by "
+            "mcp.sh — a header here is either a committed secret or an empty "
+            "value that produces a 401 and an unwanted OAuth prompt."
         )
 
-    lib_match = LIB_DEFAULT.search(LIB.read_text())
-    if not lib_match:
-        fail(f"could not read KEMORY_DEFAULT_URL from {LIB}")
-    if lib_match["default"] != shape["default"]:
+    blob = json.dumps(entry)
+    if "KEMORY_API_KEY" in blob or "KEMORY_TOKEN" in blob:
         fail(
-            f"entry defaults to {shape['default']} but the hooks default to "
-            f"{lib_match['default']} — the tools and the hooks would talk to "
-            "different servers"
+            "entry references a credential variable. mcp.sh reads those through "
+            "lib.sh, the same path the hooks use; naming one here pins the entry "
+            "to a single way of reaching Kemory, which is the bug this shape fixes."
         )
 
-    print(f"http {shape['default']}{EXPECTED_PATH}, key from KEMORY_API_KEY")
+    launcher_source = LAUNCHER.read_text()
+    if "lib.sh" not in launcher_source or "kemory_resolve_auth" not in launcher_source:
+        fail(
+            f"{LAUNCHER} does not source lib.sh and call kemory_resolve_auth — "
+            "the tools would authenticate differently from the hooks"
+        )
+
+    bridge_source = BRIDGE.read_text() if BRIDGE.is_file() else ""
+    if not bridge_source:
+        fail(f"{BRIDGE} is missing — a machine with a key and no CLI gets no tools")
+    for host in ("api.kemory.s9n.ai", "api.kemory.sekondbrain.ai"):
+        if f"https://{host}" in bridge_source:
+            fail(
+                f"{BRIDGE} hardcodes {host}. It must use KEMORY_BASE_URL from "
+                "lib.sh, so KEMORY_URL still repoints the whole plugin."
+            )
+
+    print("stdio via scripts/mcp.sh, credential resolved at launch by lib.sh")
 
 
 if __name__ == "__main__":

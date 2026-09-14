@@ -213,3 +213,56 @@ for path in candidates:
 raise SystemExit(1)
 PY
 }
+
+# Count kemory MCP server entries sitting in MCP client configs on this machine.
+#
+# Two entries means every request carries two copies of the same tools. The
+# most common way to get there is installing the plugin while a hand-written
+# entry from the pre-plugin docs is still in place, and nothing surfaces it:
+# /mcp lists them without saying they are the same server twice.
+#
+# Counts on-disk entries only. A claude.ai connector lives inside Claude and is
+# invisible from a shell, so callers must name that case separately rather than
+# reporting a reassuring zero.
+#
+# Echoes the count. The plugin's own bundled entry is not in these files.
+kemory_count_mcp_entries() {
+  command -v python3 >/dev/null 2>&1 || { echo 0; return 0; }
+  python3 - <<'PY' 2>/dev/null || echo 0
+import json, os
+
+candidates = [
+    os.path.join(os.environ.get("CLAUDE_PROJECT_DIR", os.getcwd()), ".mcp.json"),
+    os.path.expanduser("~/.claude.json"),
+    os.path.expanduser("~/.mcp.json"),
+    os.path.expanduser("~/Library/Application Support/Claude/claude_desktop_config.json"),
+]
+
+
+def count(servers):
+    if not isinstance(servers, dict):
+        return 0
+    n = 0
+    for name, cfg in servers.items():
+        blob = json.dumps(cfg).lower() if isinstance(cfg, dict) else ""
+        if "kemory" in str(name).lower() or "kemory" in blob:
+            n += 1
+    return n
+
+
+total = 0
+for path in candidates:
+    try:
+        with open(path) as fh:
+            data = json.load(fh)
+    except Exception:
+        continue
+    if not isinstance(data, dict):
+        continue
+    total += count(data.get("mcpServers"))
+    for proj in (data.get("projects") or {}).values():
+        if isinstance(proj, dict):
+            total += count(proj.get("mcpServers"))
+print(total)
+PY
+}

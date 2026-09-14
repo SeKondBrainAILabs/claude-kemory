@@ -53,8 +53,8 @@ case and says so.
 
 | You have | Do this |
 |----------|---------|
-| The Kemory CLI, signed in with `kemory login` | Nothing for the hooks — they read the CLI's stored credentials. Run `kemory connect` to write the tools' MCP entry, then disable this plugin's bundled one under `/mcp` so you are not running two. |
-| The claude.ai Kemory connector | Tools already work. The hooks still need `export KEMORY_API_KEY="..."` — the connector's OAuth token lives inside Claude and a shell script cannot read it. Disable the bundled entry under `/mcp`. |
+| The Kemory CLI, signed in with `kemory login` | Nothing at all — the hooks and the bundled MCP server both read the CLI's stored credentials. `kemory connect` is only needed for other MCP hosts. |
+| The claude.ai Kemory connector | Tools already work; disable the bundled entry under `/mcp` so you are not running two. The hooks still need `export KEMORY_API_KEY="..."` — the connector's OAuth token lives inside Claude and a shell script cannot read it. |
 | A self-hosted or community instance | `export KEMORY_URL=http://...` alongside `KEMORY_API_KEY`. One URL moves the whole plugin. |
 
 CLI install and sign-in: [docs.sekondbrain.ai/kemory/cli](https://docs.sekondbrain.ai/kemory/cli/).
@@ -150,7 +150,7 @@ script plus shellcheck. See [CONTRIBUTING.md](CONTRIBUTING.md).
 ```
 plugin/
 ├── .claude-plugin/plugin.json
-├── .mcp.json                     bundled HTTP MCP entry
+├── .mcp.json                     bundled MCP entry → scripts/mcp.sh
 ├── hooks/hooks.json
 ├── commands/status.md            /kemory:status
 ├── skills/                       kemory, setup

@@ -27,13 +27,24 @@ See the [root README](../README.md#install) for the install commands.
 
 ## Connecting Kemory
 
-The bundled MCP entry is an HTTP connection to
-`${KEMORY_URL:-https://api.kemory.s9n.ai}/mcp/v1`, sending `KEMORY_API_KEY`
-from the environment as `X-API-Key`. There is no binary to install, and the
-hooks read the same variable, so one export turns on both halves.
+The bundled MCP entry launches `scripts/mcp.sh`, which resolves a credential
+at startup through the same `lib.sh` function the hooks use, then serves:
+`kemory mcp serve` when the credential came from `kemory login`, and a bundled
+stdio-to-HTTP bridge when it came from the environment. So one entry covers
+every way of reaching Kemory, and the tools cannot end up authenticated
+differently from the hooks or pointed at a different host.
 
-If you connect another way — `kemory connect`, the hosted claude.ai connector,
-or your own entry — disable the bundled server so you do not run two.
+With no credential it exits with that reason on stderr rather than starting.
+A server that starts and exposes nothing reads as connected in `/mcp` while
+every memory tool is missing, which is worse than a visible failure.
+
+`KEMORY_URL` still repoints the whole plugin — the bridge takes its host from
+the same resolution.
+
+If you get the tools another way — the claude.ai connector, `kemory connect`,
+or your own entry — disable the bundled server so you do not run two. Two
+servers means two copies of every tool in each request; `/kemory:status`
+counts the entries it can see on disk.
 
 If no Kemory server is connected, every hook no-ops rather than erroring.
 
