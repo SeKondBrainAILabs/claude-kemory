@@ -3,6 +3,22 @@
 All notable changes to this project are documented here. This project follows
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.10] — 2026-09-14
+
+### Fixed
+- **The privacy policy named a sub-processor that does not exist.** It said
+  memory content reaches Groq and OpenRunner. OpenRunner is not a
+  sub-processor and never was: it appears nowhere in the platform — no client,
+  no base URL, no API key in any environment — and its entry on the public
+  list came from an early drafting note. The claim was added in 0.2.8 by
+  reading that list rather than the code, in the same pass that corrected
+  three other privacy statements by checking them against the backend.
+
+  Now names Groq, which is what the code shows on these paths, and defers to
+  the [sub-processor list](https://docs.sekondbrain.ai/subprocessors/) as the
+  authoritative record instead of restating a snapshot of it. A copied list
+  goes stale, which is how this happened.
+
 ## [0.2.9] — 2026-09-13
 
 The repo went public for the plugin directory, which does not accept
