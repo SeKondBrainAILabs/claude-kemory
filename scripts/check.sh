@@ -57,10 +57,18 @@ while IFS= read -r m; do
   if [ -d "${p#./}" ]; then echo "  ok   $m -> $p"; else echo "  FAIL $m -> $p"; fail=1; fi
 done < <(find . -name 'marketplace.json' -not -path './.git/*')
 
+# One tree, one plugin, one version — served to more than one agent host
+# through a manifest each. Nothing at runtime reads both, so a bump applied to
+# one and not the other ships a version that disagrees with itself, and the
+# host that reads the stale one never sees an update at all: every marketplace
+# that carries this plugin gates on the version STRING, not the commit.
 echo "→ manifests agree on version"
 pver=$(jq -r '.version' plugin/.claude-plugin/plugin.json)
+gver=$(jq -r '.version' plugin/.grok-plugin/plugin.json)
 mver=$(jq -r '.plugins[0].version' .claude-plugin/marketplace.json)
-if [ "$pver" != "$mver" ]; then
+if [ "$pver" != "$gver" ]; then
+  echo "  FAIL .claude-plugin $pver != .grok-plugin $gver"; fail=1
+elif [ "$pver" != "$mver" ]; then
   echo "  FAIL plugin.json $pver != marketplace.json $mver"; fail=1
 elif ! printf '%s' "$pver" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
   # release.yml turns this into the tag name, so a non-semver value would
@@ -74,6 +82,15 @@ fi
 # all, and it is a static file no test exercises. Assert its shape here: a
 # wrong host, a dropped credential header or a changed transport all ship
 # silently otherwise, and the symptom reaches the user, not CI.
+echo "→ manifests agree on content"
+if diff -q plugin/.claude-plugin/plugin.json plugin/.grok-plugin/plugin.json >/dev/null; then
+  echo "  ok   .claude-plugin and .grok-plugin are identical"
+else
+  echo "  FAIL the two manifests have diverged:"
+  diff plugin/.claude-plugin/plugin.json plugin/.grok-plugin/plugin.json | sed 's/^/    /'
+  fail=1
+fi
+
 echo "→ bundled MCP entry"
 if mcp_report=$(python3 scripts/check_mcp_entry.py 2>&1); then
   echo "  ok   $mcp_report"
