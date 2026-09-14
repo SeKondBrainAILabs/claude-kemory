@@ -11,16 +11,18 @@ the specific failure; the steps below act on what it says.
 ## One variable turns on everything
 
 The bundled MCP entry and the hooks resolve a credential the same way, in this
-order: `KEMORY_API_KEY`, then `KEMORY_TOKEN`, then the CLI's stored login. Any
-one of them turns on both halves. The shortest is an export, which needs
-nothing installed:
+order: `KEMORY_API_KEY`, then `KEMORY_TOKEN`, then a stored browser login. Any
+one of them turns on both halves, and the plugin can obtain the last one
+itself:
 
-```bash
-export KEMORY_API_KEY="..."   # from your Kemory dashboard
+```
+/kemory:login
 ```
 
-Put it somewhere your shell loads on startup, then restart the client fully —
-closing the window is not enough.
+It prints one link, waits while the user approves it in their browser, and
+writes `~/.kemory/credentials-<env>` — the same file the Kemory CLI writes, so
+a CLI installed later finds them already signed in. Restart the client fully
+afterwards; closing the window is not enough.
 
 With none of them, the bundled server does not start and says why on stderr.
 `/kemory:status` reports the same thing without reading logs.
@@ -28,21 +30,17 @@ With none of them, the bundled server does not start and says why on stderr.
 Self-hosted or community edition: set `KEMORY_URL` to your API base, no
 trailing slash and no path. Both the MCP entry and the hooks honour it.
 
-## If you would rather sign in with a browser
+## The other routes, and when they are the right one
 
-`kemory connect` writes its own MCP entry using the CLI's stored credentials,
-so no key is ever written into a config file:
+`KEMORY_API_KEY` is the headless route — CI, a container, any machine with no
+browser to approve a sign-in in. It is a long-lived secret, so prefer
+`/kemory:login` anywhere a browser exists.
 
-```bash
-kemory login
-kemory connect
-```
-
-`kemory login` alone is enough for the bundled server — it reads that same
-credential file and serves through the CLI's bridge. `kemory connect` is for
-other MCP hosts (Cursor, Warp, Claude Desktop); if you run it for Claude Code
-as well, **disable the bundled server** so two are not running. Run `/mcp` to
-see what is actually connected.
+The Kemory CLI's `kemory login` does the same thing from a terminal and writes
+the same file; either is enough for the bundled server. `kemory connect` is a
+different job — it registers Kemory with *other* MCP hosts (Cursor, Warp,
+Claude Desktop). Running it for Claude Code as well leaves two servers, so
+**disable the bundled one** if you do. `/mcp` shows what is actually connected.
 
 Getting the CLI is a separate step; the root README covers Homebrew and the
 direct download.

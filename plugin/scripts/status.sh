@@ -40,7 +40,7 @@ if kemory_resolve_auth; then
   fi
   if [ "${KEMORY_TOKEN_EXPIRED:-0}" = "1" ]; then
     bad "the stored token is expired and could not be refreshed"
-    info "run 'kemory login' again — until then every hook will be rejected"
+    info "run /kemory:login again — until then every hook will be rejected"
   fi
 else
   bad "no credential the hooks can use — every hook is inert"
@@ -50,10 +50,11 @@ else
     info "export that same key as KEMORY_API_KEY to turn the hooks on"
   else
     if command -v kemory >/dev/null 2>&1; then
-      info "run 'kemory login' (browser sign-in), or set KEMORY_API_KEY"
+      info "run /kemory:login (browser sign-in), or set KEMORY_API_KEY"
     else
-      # No CLI on this machine, so do not recommend a CLI command as step one.
-      info "set KEMORY_API_KEY, or install the kemory CLI and run 'kemory login'"
+      # /kemory:login ships with the plugin, so there is no longer a machine
+      # where the best route has to be installed first.
+      info "run /kemory:login (browser sign-in), or set KEMORY_API_KEY"
     fi
   fi
 fi

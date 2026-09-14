@@ -3,6 +3,54 @@
 All notable changes to this project are documented here. This project follows
 [Semantic Versioning](https://semver.org/).
 
+## [0.6.0] — 2026-09-14
+
+### Added
+- **`/kemory:login` — the plugin can now sign a user in by itself.** Until this
+  release the plugin could only *read* a credential: `lib.sh` takes
+  `KEMORY_API_KEY`, `KEMORY_TOKEN`, or the Kemory CLI's stored login, and with
+  none of them the launcher exited telling the user to install a CLI or export a
+  long-lived secret into a shell profile — the two things a non-technical user
+  does not have and should not need. So the one route that carries the hooks was
+  the one such a user could not complete.
+
+  It is an RFC 8628 device authorization grant against the same public client
+  the CLI uses: one link, approve in the browser, nothing typed and nothing
+  pasted. The response carries `verification_uri_complete`, so the user code is
+  already in the URL.
+
+  Chosen over the pair-claim prompt deliberately. Pair-claim exists for AIs with
+  no browser of their own; it needs a dashboard session to mint a code, it hands
+  back a long-lived API key, and the brief it gives the agent persists an MCP
+  entry — a second one, beside the plugin's own. Claude Code runs on the user's
+  machine with a browser next to it, so none of that applies here. Device flow
+  needs no dashboard, yields refreshable revocable tokens, registers no MCP
+  server, and required no server-side change at all.
+
+  It writes `~/.kemory/credentials-<env>` in the CLI's own v2 shape, so a CLI
+  installed later finds the user already signed in, and `lib.sh` reads and
+  refreshes it exactly as before. `email` and `org_id` come from the access
+  token's own claims, so no extra API call is needed to fill the file.
+
+### Changed
+- **Every credential prompt now names one route instead of branching.** The
+  setup hint used to choose between naming `kemory login` — useless on a machine
+  without the CLI — and leading with `KEMORY_API_KEY`, a long-lived secret in a
+  shell profile. `/kemory:login` ships with the plugin, so there is no longer a
+  machine where the best answer has to be installed first. `mcp.sh`'s refusal,
+  `/kemory:status` and the setup skill all say the same thing.
+- `KEMORY_API_KEY` returns to being what it was meant to be: the headless
+  fallback, for CI and containers with no browser to approve a sign-in in.
+
+### Notes
+- `active_org_id` is **not** a token claim and is not always equal to `org_id` —
+  `kemory use` switches it. A sign-in that overwrote it would silently move a
+  user back to their default organisation, which is how memories have landed in
+  the wrong org before. An existing value is preserved; only a first sign-in
+  defaults it. There is a test for exactly this.
+- The credential file now has two writers, so the login writes it atomically at
+  `0600`, matching `lib.sh`'s refresh.
+
 ## [0.5.1] — 2026-09-14
 
 ### Fixed
