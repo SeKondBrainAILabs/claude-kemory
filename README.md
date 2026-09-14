@@ -91,6 +91,12 @@ the version you are on, and [CHANGELOG.md](CHANGELOG.md) says what moved.
 | store nudge | `Stop` | When the turn settled something durable and no Kemory write happened, asks for it before the turn ends | Nothing | **off** |
 | session capture | `Stop`, `SessionEnd` | Stores a redacted digest of your own prompts: last 12 turns, 8000 characters | Your prompts, redacted | **off** |
 
+If you pasted the instruction into `CLAUDE.md` before the plugin shipped one,
+you can delete it — the plugin says so once a week until you do. Keeping both
+is not harmful, but the pasted copy asks the agent to open each session with
+`kemory_list_namespaces` and a recall, which the prompt-recall hook has already
+done by then.
+
 The instruction is injected on every session, including a brand-new vault and
 a session whose context call failed. It is short on purpose: recall and the
 write prompt are hooks now, so it says only what no hook can — what Kemory is,

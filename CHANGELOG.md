@@ -3,6 +3,24 @@
 All notable changes to this project are documented here. This project follows
 [Semantic Versioning](https://semver.org/).
 
+## [0.3.1] — 2026-09-14
+
+### Changed
+- **The injected instruction now says where to write.** It told the agent to
+  report "what you stored and where" without ever giving it a convention for
+  where — guidance the long pasted version did carry. Anyone told to delete
+  their pasted copy after 0.3.0 would have lost it.
+
+### Added
+- **A weekly notice when a hand-pasted instruction is still in place.** The
+  docs told people to paste one into `CLAUDE.md` long before the plugin
+  shipped one. Both together are not harmful, but the pasted copy asks the
+  agent to open every session with `kemory_list_namespaces` plus a recall —
+  work `prompt-recall.sh` has already done by then, so it costs two tool calls
+  a session to repeat it. The plugin reads `~/.claude/CLAUDE.md` and the
+  project's `CLAUDE.md` to spot it, says so once a week, and never edits
+  either file. `KEMORY_QUIET_SETUP=1` silences it.
+
 ## [0.3.0] — 2026-09-14
 
 ### Added

@@ -242,6 +242,74 @@ class HookTest(unittest.TestCase):
         ctx = self._injected(self._start())
         self.assertIn("Do not ask whether to save", ctx)
 
+
+    # --- namespace guidance, and the hand-pasted copy ----------------------
+    def test_instruction_says_where_to_write(self):
+        # "say what you stored and where" is unusable without a convention for
+        # where; the long pasted version carried one and this must too, or
+        # telling people to delete the paste loses them something.
+        Recorder.get_payload = {"namespaces": []}
+        ctx = self._injected(self._start())
+        self.assertIn("kemory_list_namespaces", ctx)
+        self.assertIn("user-scoped", ctx)
+
+    def _claude_md(self, text, project=False):
+        if project:
+            d = pathlib.Path(self.home) / "proj"
+        else:
+            d = pathlib.Path(self.home) / ".claude"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "CLAUDE.md").write_text(text)
+        return str(d)
+
+    PASTED = "## Memory\nYou have Kemory memory tools. Call kemory_list_namespaces first.\n"
+
+    def test_notice_when_a_pasted_instruction_is_still_in_place(self):
+        self._claude_md(self.PASTED)
+        Recorder.get_payload = {"namespaces": []}
+        out = self._start()
+        self.assertIn("CLAUDE.md", out.get("systemMessage", ""))
+
+    def test_notice_finds_a_project_level_paste(self):
+        cwd = self._claude_md(self.PASTED, project=True)
+        Recorder.get_payload = {"namespaces": []}
+        r = self.run_script("session-start.sh", {"source": "startup", "cwd": cwd},
+                            KEMORY_API_KEY="k")
+        self.assertIn("CLAUDE.md", json.loads(r.stdout).get("systemMessage", ""))
+
+    def test_no_notice_without_a_pasted_instruction(self):
+        self._claude_md("# Project notes\nRun the tests with pytest.\n")
+        Recorder.get_payload = {"namespaces": []}
+        self.assertNotIn("systemMessage", self._start())
+
+    def test_notice_is_weekly_not_every_session(self):
+        self._claude_md(self.PASTED)
+        Recorder.get_payload = {"namespaces": []}
+        first, second = self._start(), self._start()
+        self.assertIn("systemMessage", first)
+        self.assertNotIn("systemMessage", second)
+
+    def test_notice_respects_the_quiet_flag(self):
+        self._claude_md(self.PASTED)
+        Recorder.get_payload = {"namespaces": []}
+        self.assertNotIn("systemMessage", self._start(KEMORY_QUIET_SETUP="1"))
+
+    def test_notice_never_edits_the_users_file(self):
+        path = pathlib.Path(self._claude_md(self.PASTED)) / "CLAUDE.md"
+        before = path.read_text()
+        Recorder.get_payload = {"namespaces": []}
+        self._start()
+        self.assertEqual(path.read_text(), before)
+
+    def test_the_instruction_still_ships_alongside_the_notice(self):
+        # A notice that replaced the injection would be a regression wearing a
+        # helpful hat.
+        self._claude_md(self.PASTED)
+        Recorder.get_payload = {"namespaces": []}
+        out = self._start()
+        self.assertIn(self.INSTRUCTION_MARK, self._injected(out))
+        self.assertIn("systemMessage", out)
+
     # --- store nudge (Stop) ------------------------------------------------
     def turn(self, *events):
         p = pathlib.Path(tempfile.mktemp(suffix=".jsonl", dir=self.home))
