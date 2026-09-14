@@ -1,6 +1,6 @@
-# claude-kemory
+# kemory-plugin
 
-Persistent, cross-session memory for Claude Code, powered by
+The Kemory plugin for **Claude Code**. Persistent, cross-session memory, powered by
 [Kemory](https://kemory.sekondbrain.ai). Works with hosted Kemory and the
 open-source [community edition](https://github.com/SeKondBrainAILabs/kemory-community).
 
@@ -30,7 +30,7 @@ turn on.
 Inside Claude Code:
 
 ```
-/plugin marketplace add SeKondBrainAILabs/claude-kemory
+/plugin marketplace add SeKondBrainAILabs/kemory-plugin
 /plugin install kemory@kemory
 /kemory:login
 ```
@@ -151,6 +151,7 @@ plugin/
 └── scripts/                      one script per hook, plus lib and redact
 ```
 
-This repo is the Claude Code integration only. Apache-2.0. The open-source
-server, MCP tools and CLI are in
+Everything here is the Claude Code integration; plugins for other hosts will
+live alongside it rather than in repositories of their own. Apache-2.0. The
+open-source server, MCP tools and CLI are in
 [kemory-community](https://github.com/SeKondBrainAILabs/kemory-community).

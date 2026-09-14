@@ -3,6 +3,19 @@
 All notable changes to this project are documented here. This project follows
 [Semantic Versioning](https://semver.org/).
 
+## [0.6.1] — 2026-09-14
+
+### Changed
+- **The repository is now `SeKondBrainAILabs/kemory-plugin`**, and every
+  reference follows it: the install command, the plugin manifest's `homepage`
+  and author URL, `NOTICE`, and the links out of both READMEs. GitHub redirects
+  the old path, so an existing install keeps working and `/plugin update` still
+  resolves — but a reader landing on the old name would see a repository that
+  redirects, which is one more thing to wonder about.
+
+  The rename anticipates integrations for other hosts living here too, rather
+  than one repository per host.
+
 ## [0.6.0] — 2026-09-14
 
 ### Added
