@@ -3,6 +3,41 @@
 All notable changes to this project are documented here. This project follows
 [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] — 2026-09-14
+
+### Added
+- **A session-start notice when the installed plugin is behind.** Plugins do
+  not update themselves and nothing said so: a 0.1.3 install ran for two weeks
+  and three releases without `prompt-recall.sh` — the plugin's main mechanism —
+  and looked healthy the whole time, because `/kemory:status` could only report
+  on the version it was, never the version there was.
+
+  It compares against the marketplace clone Claude Code already keeps on disk.
+  Deliberately **not** a network call: `PRIVACY.md` promises this plugin adds
+  "no third-party endpoint of its own", and asking GitHub for a version number
+  would trade that promise for a convenience. The cost is that a marketplace
+  clone nobody has refreshed reads as current and says nothing — a silence
+  that resolves itself the next time anything refreshes it, which is the right
+  direction for a check like this to fail.
+
+  Once a day, `KEMORY_QUIET_SETUP=1` silences it, and it shares the one
+  `systemMessage` slot with the pasted-instruction notice rather than
+  displacing it. It also rides along with the no-credential setup hint: a user
+  who gets their tools from the connector has no hook credential on purpose,
+  reaches that branch every day, and would otherwise have been the one
+  population that never hears the plugin moved — the same people the old
+  bundled entry stranded.
+
+### Fixed
+- **The bundled bridge now carries `Mcp-Session-Id`.** The Kemory endpoint is
+  stateless today — verified: `initialize` issues no session id — so 0.4.0's
+  bridge held none. The transport allows a server to start issuing one at any
+  time, and a relay that dropped it would break every call after the first,
+  with nothing in a stateless test to catch it. The header is echoed back when
+  the server sends one, a 404 against a forgotten session clears it rather
+  than wedging every later call, and `202 Accepted` is treated as "received,
+  nothing to return". Tests cover both the stateful and the stateless server.
+
 ## [0.4.0] — 2026-09-14
 
 ### Changed

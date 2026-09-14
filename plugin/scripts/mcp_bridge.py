@@ -10,10 +10,14 @@ Reads KEMORY_BASE_URL and KEMORY_AUTH_HEADER from the environment — resolved b
 lib.sh, the same function the hooks use, so both halves authenticate identically
 and cannot drift apart.
 
-The endpoint is stateless JSON (verified against the live API: `initialize`
-answers 200 application/json with no Mcp-Session-Id), so this is a relay and
-holds no session state. A text/event-stream reply is still parsed, because a
-server that later negotiates SSE should degrade to working rather than silent.
+Today's endpoint is stateless JSON — verified against the live API: `initialize`
+answers 200 application/json and issues no `Mcp-Session-Id`. The transport
+allows a server to start issuing one at any time, though, and a relay that
+dropped it would break the moment that happened, in a way no test here would
+catch. So the header is echoed back when the server sends one, and a 404 on a
+session the server has since forgotten clears it rather than wedging every
+later call. Same reason a text/event-stream reply is parsed: degrade to
+working rather than to silence.
 
 Every failure answers in-band as a JSON-RPC error. A bridge that dies on a bad
 response leaves the host waiting on a request that can never complete.
@@ -30,6 +34,11 @@ TIMEOUT = float(os.environ.get("KEMORY_MCP_TIMEOUT", "120"))
 # -32603 is JSON-RPC "internal error": the request was well-formed and we could
 # not answer it. Transport faults are ours, not the caller's.
 INTERNAL_ERROR = -32603
+
+# Set from the server's Mcp-Session-Id when it issues one, and sent on every
+# later request. Module state because a bridge process serves exactly one
+# client connection, which is what a session is scoped to.
+_session_id: str | None = None
 
 
 def _endpoint() -> str:
@@ -81,18 +90,32 @@ def _error(request_id, message: str) -> dict:
 
 def _relay(endpoint: str, headers: dict[str, str], request: dict) -> dict | None:
     """POST one message. Returns the reply, or None when none is due."""
+    global _session_id
+
     # A JSON-RPC notification has no `id` and takes no response. Answering one
     # is a protocol violation the host may drop the connection over.
     request_id = request.get("id")
     is_notification = "id" not in request
 
+    sent = dict(headers)
+    if _session_id:
+        sent["Mcp-Session-Id"] = _session_id
+
     body = json.dumps(request).encode()
-    req = urllib.request.Request(endpoint, data=body, headers=headers, method="POST")
+    req = urllib.request.Request(endpoint, data=body, headers=sent, method="POST")
     try:
         with urllib.request.urlopen(req, timeout=TIMEOUT) as response:
+            issued = response.headers.get("Mcp-Session-Id")
+            if issued:
+                _session_id = issued
+            status = response.status
             raw = response.read()
             content_type = response.headers.get("Content-Type", "")
     except urllib.error.HTTPError as exc:
+        # 404 against a session id means the server has forgotten it. Dropping
+        # it lets the next call start clean instead of failing forever.
+        if exc.code == 404 and _session_id:
+            _session_id = None
         if is_notification:
             return None
         detail = exc.read().decode("utf-8", "replace")[:200].strip()
@@ -106,6 +129,9 @@ def _relay(endpoint: str, headers: dict[str, str], request: dict) -> dict | None
         return _error(request_id, f"kemory API unreachable: {exc.__class__.__name__}: {exc}")
 
     if is_notification:
+        return None
+    # 202 Accepted is the transport's "received, nothing to return".
+    if status == 202:
         return None
     try:
         parsed = _parse(raw, content_type)

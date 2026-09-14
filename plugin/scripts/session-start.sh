@@ -51,8 +51,8 @@ export KEMORY_INSTRUCTION
 emit_instruction_only() {
   python3 -c 'import json, os
 out = {"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": os.environ["KEMORY_INSTRUCTION"]}}
-if os.environ.get("KEMORY_PASTED_AT"):
-    out["systemMessage"] = os.environ["KEMORY_PASTE_NOTICE"]
+if os.environ.get("KEMORY_NOTICE"):
+    out["systemMessage"] = os.environ["KEMORY_NOTICE"]
 print(json.dumps(out))' 2>/dev/null
 }
 
@@ -94,6 +94,100 @@ export KEMORY_PASTED_AT
 KEMORY_PASTE_NOTICE="Kemory plugin: $KEMORY_PASTED_AT still contains a pasted memory instruction. The plugin now ships one, and the pasted copy asks the agent to open every session with list_namespaces + recall — which the prompt-recall hook has already done by then. Removing it saves two tool calls a session. Silence this with KEMORY_QUIET_SETUP=1."
 export KEMORY_PASTE_NOTICE
 
+# Plugins do not update themselves, and nothing tells anyone their install is
+# behind. A 0.1.3 install ran for two weeks and three releases without the
+# prompt-recall hook, which is the plugin's main mechanism — it looked healthy
+# the whole time, because /kemory:status reported on the version it was rather
+# than the version there was.
+#
+# Compares against the marketplace clone Claude Code keeps on disk. NOT a
+# network call: PRIVACY.md promises this plugin adds "no third-party endpoint
+# of its own", and asking GitHub for a version number would break that for a
+# convenience. The trade is that a marketplace clone which has not been
+# refreshed reads as up to date and says nothing — a silence that resolves
+# itself the next time anything refreshes it, which is the right direction for
+# a check like this to fail.
+#
+# Echoes "<installed> <available>" when behind, nothing otherwise.
+find_stale_version() {
+  [ "${KEMORY_QUIET_SETUP:-0}" = "1" ] && return 0
+  command -v python3 >/dev/null 2>&1 || return 0
+
+  local stamp="$HOME/.kemory/.version-hint"
+  if [ -f "$stamp" ]; then
+    local now age
+    now=$(date +%s)
+    age=$(( now - $(stat -f %m "$stamp" 2>/dev/null || stat -c %Y "$stamp" 2>/dev/null || echo "$now") ))
+    [ "$age" -lt 86400 ] && return 0
+  fi
+
+  local answer
+  answer="$(KEMORY_MANIFEST="$DIR/../.claude-plugin/plugin.json" python3 -c '
+import glob, json, os, re
+
+
+def parts(v):
+    """Compare numerically, so 0.10.0 sorts above 0.9.0."""
+    m = re.match(r"^(\d+)\.(\d+)\.(\d+)$", str(v or ""))
+    return tuple(int(g) for g in m.groups()) if m else None
+
+
+try:
+    installed = json.load(open(os.environ["KEMORY_MANIFEST"]))["version"]
+except Exception:
+    raise SystemExit(0)
+
+here = parts(installed)
+if here is None:
+    raise SystemExit(0)
+
+# Whichever marketplace carries this plugin; a user may have added it under
+# any name, so match on the plugin rather than the directory.
+best = None
+for path in glob.glob(os.path.expanduser(
+        "~/.claude/plugins/marketplaces/*/.claude-plugin/marketplace.json")):
+    try:
+        entries = json.load(open(path)).get("plugins") or []
+    except Exception:
+        continue
+    for entry in entries:
+        if entry.get("name") != "kemory":
+            continue
+        there = parts(entry.get("version"))
+        if there and (best is None or there > best):
+            best = there
+
+if best is not None and best > here:
+    print(installed, ".".join(str(n) for n in best))
+' 2>/dev/null)"
+
+  [ -n "$answer" ] || return 0
+  mkdir -p "$(dirname "$stamp")" 2>/dev/null && touch "$stamp" 2>/dev/null
+  printf '%s' "$answer"
+}
+
+KEMORY_VERSION_NOTICE=""
+KEMORY_STALE="$(find_stale_version)"
+if [ -n "$KEMORY_STALE" ]; then
+  KEMORY_VERSION_NOTICE="Kemory plugin: version ${KEMORY_STALE%% *} installed, ${KEMORY_STALE##* } available. Hooks are where this plugin's behaviour lives, so an old install quietly runs old behaviour. Update with /plugin update kemory@kemory, then restart. Silence this with KEMORY_QUIET_SETUP=1."
+fi
+
+# One systemMessage slot, so anything with something to say shares it.
+KEMORY_NOTICE=""
+if [ -n "$KEMORY_PASTED_AT" ]; then
+  KEMORY_NOTICE="$KEMORY_PASTE_NOTICE"
+fi
+if [ -n "$KEMORY_VERSION_NOTICE" ]; then
+  if [ -n "$KEMORY_NOTICE" ]; then
+    KEMORY_NOTICE="$KEMORY_NOTICE
+
+$KEMORY_VERSION_NOTICE"
+  else
+    KEMORY_NOTICE="$KEMORY_VERSION_NOTICE"
+  fi
+fi
+export KEMORY_VERSION_NOTICE KEMORY_NOTICE
+
 
 emit_setup_hint() {
   [ "${KEMORY_QUIET_SETUP:-0}" = "1" ] && exit 0
@@ -125,7 +219,11 @@ emit_setup_hint() {
       msg="Kemory plugin: the hooks have no credential, so context injection, prompt recall, rating and capture are off. Your MCP memory tools may already be working \u2014 they authenticate separately. Quickest fix: export KEMORY_API_KEY with a key from kemory.sekondbrain.ai. Or install the kemory CLI and run \`kemory login\` \u2014 see the plugin README for how to get it."
     fi
   fi
-  KEMORY_MSG="$msg" python3 -c 'import json, os; print(json.dumps({"systemMessage": os.environ["KEMORY_MSG"].encode().decode("unicode_escape") + " Silence this with KEMORY_QUIET_SETUP=1.", "hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": os.environ["KEMORY_INSTRUCTION"]}}))' 2>/dev/null \
+  # A stale install is worth saying even here. Someone who gets their tools
+  # from the connector has no hook credential on purpose, reaches this branch
+  # every day, and would otherwise be the one population that never hears its
+  # plugin is behind — which is exactly who the old bundled entry stranded.
+  KEMORY_MSG="$msg" KEMORY_VERSION_NOTICE="$KEMORY_VERSION_NOTICE" python3 -c 'import json, os; print(json.dumps({"systemMessage": " ".join(p for p in (os.environ["KEMORY_MSG"].encode().decode("unicode_escape") + " Silence this with KEMORY_QUIET_SETUP=1.", os.environ.get("KEMORY_VERSION_NOTICE", "")) if p), "hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": os.environ["KEMORY_INSTRUCTION"]}}))' 2>/dev/null \
     || printf '%s\n' '{"systemMessage":"Kemory plugin: the hooks have no credential, so context injection, recall, rating and capture are off. Run kemory login, or export KEMORY_API_KEY. Silence this with KEMORY_QUIET_SETUP=1."}'
   exit 0
 }
@@ -145,7 +243,7 @@ KEMORY_RESP="$RESP" \
 KEMORY_PAYLOAD="$PAYLOAD" \
 KEMORY_INSTRUCTION="$KEMORY_INSTRUCTION" \
 KEMORY_PASTED_AT="$KEMORY_PASTED_AT" \
-KEMORY_PASTE_NOTICE="$KEMORY_PASTE_NOTICE" \
+KEMORY_NOTICE="$KEMORY_NOTICE" \
 KEMORY_MAX_CHARS="${KEMORY_CONTEXT_MAX_CHARS:-4000}" \
 KEMORY_NAMESPACES="${KEMORY_CONTEXT_NAMESPACES:-}" \
 python3 <<'PY' 2>/dev/null
@@ -169,8 +267,8 @@ def emit(context):
         }}
         # Housekeeping, not a fault: the user has a working setup and one
         # redundant file. Throttled to weekly by the caller.
-        if os.environ.get("KEMORY_PASTED_AT"):
-            out["systemMessage"] = os.environ.get("KEMORY_PASTE_NOTICE", "")
+        if os.environ.get("KEMORY_NOTICE"):
+            out["systemMessage"] = os.environ["KEMORY_NOTICE"]
         print(json.dumps(out))
     raise SystemExit(0)
 
