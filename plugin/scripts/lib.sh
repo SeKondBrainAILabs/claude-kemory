@@ -266,3 +266,112 @@ for path in candidates:
 print(total)
 PY
 }
+
+# Find an MCP server already configured on this machine that points at the SAME
+# Kemory this plugin would serve.
+#
+# Two servers for one endpoint means every request carries two copies of the
+# same tools, and /mcp lists them without saying they are the same server twice.
+# The plugin's bundled entry is the one that should stand down: an entry in a
+# host config was put there deliberately, by `kemory mcp install`, by a pasted
+# pair-claim prompt, or by hand, and yielding costs only the duplicate — the
+# hooks read credentials directly and keep working either way.
+#
+# SAME ENDPOINT, not same name. `kemory mcp install` pins the env in the args
+# precisely so prod and staging can coexist as separate servers, so two entries
+# on different hosts are deliberate multi-env work and must be left alone.
+#
+# Resolves each entry the way the thing that runs it would:
+#   * an http/sse entry          -> the host of its own url
+#   * `kemory [--env X] mcp serve` -> the host in ~/.kemory/credentials-X
+# An entry whose endpoint cannot be worked out is SKIPPED, never guessed at:
+# standing down wrongly costs the user their tools.
+#
+# Echoes "<server name>\t<config path>" on a match; silent otherwise.
+kemory_find_duplicate_server() {
+  [ -n "${KEMORY_BASE_URL:-}" ] || return 0
+  command -v python3 >/dev/null 2>&1 || return 0
+  KEMORY_MINE="$KEMORY_BASE_URL" python3 - <<'PY' 2>/dev/null
+import json, os, urllib.parse
+
+MINE = urllib.parse.urlparse(os.environ["KEMORY_MINE"]).netloc.lower()
+if not MINE:
+    raise SystemExit(0)
+
+candidates = [
+    os.path.join(os.environ.get("CLAUDE_PROJECT_DIR", os.getcwd()), ".mcp.json"),
+    os.path.expanduser("~/.claude.json"),
+    os.path.expanduser("~/.mcp.json"),
+    os.path.expanduser("~/Library/Application Support/Claude/claude_desktop_config.json"),
+]
+
+
+def host_of(url):
+    try:
+        return urllib.parse.urlparse(url).netloc.lower()
+    except Exception:
+        return ""
+
+
+def cli_host(args):
+    """The endpoint `kemory [--env X] mcp serve` would forward to."""
+    env = "prod"
+    for i, a in enumerate(args):
+        if a == "--env" and i + 1 < len(args):
+            env = args[i + 1]
+        elif a.startswith("--env="):
+            env = a.split("=", 1)[1]
+    for name in (f"credentials-{env}", "credentials"):
+        try:
+            with open(os.path.expanduser(f"~/.kemory/{name}")) as fh:
+                return host_of(json.load(fh).get("kemory_url") or "")
+        except Exception:
+            continue
+    return ""
+
+
+def endpoint_of(cfg):
+    if not isinstance(cfg, dict):
+        return ""
+    url = cfg.get("url")
+    if isinstance(url, str) and url:
+        return host_of(url)
+    command = str(cfg.get("command") or "")
+    args = [str(a) for a in (cfg.get("args") or [])]
+    if os.path.basename(command) == "kemory" and "serve" in args:
+        return cli_host(args)
+    return ""
+
+
+def scan(servers, path):
+    if not isinstance(servers, dict):
+        return None
+    for name, cfg in servers.items():
+        blob = json.dumps(cfg).lower() if isinstance(cfg, dict) else ""
+        if "kemory" not in str(name).lower() and "kemory" not in blob:
+            continue
+        if endpoint_of(cfg) == MINE:
+            return name, path
+    return None
+
+
+for path in candidates:
+    try:
+        with open(path) as fh:
+            data = json.load(fh)
+    except Exception:
+        continue
+    if not isinstance(data, dict):
+        continue
+    hit = scan(data.get("mcpServers"), path)
+    if not hit:
+        for proj in (data.get("projects") or {}).values():
+            if isinstance(proj, dict):
+                hit = scan(proj.get("mcpServers"), path)
+                if hit:
+                    break
+    if hit:
+        print(f"{hit[0]}\t{hit[1]}")
+        raise SystemExit(0)
+PY
+}

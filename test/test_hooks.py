@@ -1914,6 +1914,166 @@ class DeviceLoginTest(unittest.TestCase):
         self.assertNotIn("login", json.dumps(hooks))
 
 
+class DuplicateServerTest(unittest.TestCase):
+    """Standing down when this machine already serves the same Kemory.
+
+    The asymmetry that matters: failing to stand down costs duplicated tools,
+    standing down wrongly costs the user their tools entirely. So every test
+    that asserts a yield has a twin asserting we do NOT yield on a case that
+    only looks similar.
+    """
+
+    def setUp(self):
+        self.home = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.home, ignore_errors=True)
+        self.mine = "https://api.kemory.s9n.ai"
+
+    def env(self, **extra):
+        e = {k: v for k, v in os.environ.items() if not k.startswith("KEMORY_")}
+        # No real kemory CLI on PATH, so the launcher takes the bridge branch
+        # and the test does not depend on what this machine has installed.
+        path = ":".join(d for d in os.environ.get("PATH", "").split(":")
+                        if not (pathlib.Path(d) / "kemory").exists())
+        e.update({"HOME": self.home, "CLAUDE_PROJECT_DIR": self.home,
+                  "PATH": path, "KEMORY_URL": self.mine, "KEMORY_API_KEY": "k"})
+        e.update(extra)
+        return e
+
+    def write_config(self, servers, name=".claude.json", projects=None):
+        blob = {"mcpServers": servers}
+        if projects:
+            blob["projects"] = projects
+        (pathlib.Path(self.home) / name).write_text(json.dumps(blob))
+
+    def write_cli_credentials(self, url, env="prod"):
+        d = pathlib.Path(self.home) / ".kemory"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / f"credentials-{env}").write_text(json.dumps({
+            "kemory_url": url, "access_token": "t", "refresh_token": "r",
+            "expires_at": time.time() + 3600, "client_id": "kemory-cli",
+            "issuer": "https://issuer.invalid/realms/x", "env": env, "version": 2}))
+
+    def launch(self, **extra):
+        return subprocess.run([str(SCRIPTS / "mcp.sh")], input="", text=True,
+                              capture_output=True, env=self.env(**extra))
+
+    def assertStoodDown(self, r, named):
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("standing down", r.stderr)
+        self.assertIn(named, r.stderr)
+        self.assertIn("hooks are unaffected", r.stderr,
+                      "the message must say what is NOT lost")
+
+    def assertServed(self, r):
+        self.assertNotIn("standing down", r.stderr)
+
+    # --- yields -------------------------------------------------------------
+
+    def test_yields_to_an_http_entry_on_the_same_host(self):
+        self.write_config({"kemory": {"type": "http",
+                                      "url": f"{self.mine}/mcp/v1"}})
+        self.assertStoodDown(self.launch(), "kemory")
+
+    def test_yields_to_a_cli_entry_resolved_through_its_pinned_env(self):
+        # What `kemory mcp install` actually writes: the endpoint is not in the
+        # entry at all, it is in the credentials file the pinned env names.
+        self.write_cli_credentials(self.mine, env="prod")
+        self.write_config({"kemory": {"command": "kemory",
+                                      "args": ["--env", "prod", "mcp", "serve"],
+                                      "env": {}}})
+        self.assertStoodDown(self.launch(), "kemory")
+
+    def test_yields_to_an_entry_that_is_not_called_kemory(self):
+        # A hand-written entry is often named something else.
+        self.write_config({"memory": {"type": "http",
+                                      "url": f"{self.mine}/mcp/v1"}})
+        self.assertStoodDown(self.launch(), "memory")
+
+    def test_yields_to_a_per_project_entry(self):
+        self.write_config({}, projects={"/somewhere": {"mcpServers": {
+            "kemory": {"type": "http", "url": f"{self.mine}/mcp/v1"}}}})
+        self.assertStoodDown(self.launch(), "kemory")
+
+    def test_the_message_names_the_file_and_a_way_back(self):
+        self.write_config({"kemory": {"type": "http", "url": f"{self.mine}/mcp/v1"}})
+        r = self.launch()
+        self.assertIn(".claude.json", r.stderr, "name the file, not just the server")
+        self.assertIn("KEMORY_ALLOW_DUPLICATE=1", r.stderr)
+
+    # --- does NOT yield -----------------------------------------------------
+
+    def test_does_not_yield_to_a_different_kemory(self):
+        # prod beside staging is deliberate multi-env work. `kemory mcp install`
+        # pins the env in its args for exactly this reason.
+        self.write_config({"kemory-staging": {
+            "type": "http", "url": "https://api.kemory.staging.s9n.ai/mcp/v1"}})
+        self.assertServed(self.launch())
+
+    def test_does_not_yield_to_a_cli_entry_pinned_to_another_env(self):
+        self.write_cli_credentials(self.mine, env="prod")
+        self.write_cli_credentials("https://api.kemory.staging.s9n.ai", env="staging")
+        self.write_config({"kemory-staging": {
+            "command": "kemory", "args": ["--env", "staging", "mcp", "serve"]}})
+        self.assertServed(self.launch())
+
+    def test_does_not_yield_to_an_unrelated_server(self):
+        self.write_config({"github": {"type": "http",
+                                      "url": "https://api.github.com/mcp"}})
+        self.assertServed(self.launch())
+
+    def test_does_not_yield_on_an_entry_whose_endpoint_is_unknowable(self):
+        # A kemory-ish stdio entry we cannot resolve: guessing here would cost
+        # the user their tools, so it is skipped rather than assumed to match.
+        self.write_config({"kemory": {"command": "some-other-bridge",
+                                      "args": ["--serve"]}})
+        self.assertServed(self.launch())
+
+    def test_does_not_yield_when_the_cli_entry_has_no_credentials_to_resolve(self):
+        self.write_config({"kemory": {"command": "kemory",
+                                      "args": ["--env", "prod", "mcp", "serve"]}})
+        self.assertServed(self.launch())
+
+    def test_no_config_at_all_serves(self):
+        self.assertServed(self.launch())
+
+    def test_malformed_config_does_not_stop_the_server(self):
+        (pathlib.Path(self.home) / ".claude.json").write_text("{not json")
+        self.assertServed(self.launch())
+
+    def test_the_escape_hatch_serves_anyway(self):
+        self.write_config({"kemory": {"type": "http", "url": f"{self.mine}/mcp/v1"}})
+        self.assertServed(self.launch(KEMORY_ALLOW_DUPLICATE="1"))
+
+    def test_status_says_the_same_thing_the_launcher_does(self):
+        # A tick in /kemory:status beside a server that quietly declines to
+        # start is the exact lie this section was already fixed for once.
+        self.write_config({"kemory": {"type": "http", "url": f"{self.mine}/mcp/v1"}})
+        r = subprocess.run([str(SCRIPTS / "status.sh")], input="{}", text=True,
+                           capture_output=True, env=self.env())
+        self.assertIn("stand down", r.stdout)
+        self.assertIn("hooks are unaffected", r.stdout)
+
+    def test_status_does_not_cry_duplicate_for_another_env(self):
+        self.write_config({"kemory-staging": {
+            "type": "http", "url": "https://api.kemory.staging.s9n.ai/mcp/v1"}})
+        r = subprocess.run([str(SCRIPTS / "status.sh")], input="{}", text=True,
+                           capture_output=True, env=self.env())
+        self.assertNotIn("stand down", r.stdout)
+        self.assertIn("pointing elsewhere", r.stdout)
+
+    def test_no_credential_still_reports_the_credential_problem_first(self):
+        # A machine with a duplicate AND no credential has one actionable
+        # problem; naming the duplicate there would be answering the wrong one.
+        self.write_config({"kemory": {"type": "http", "url": f"{self.mine}/mcp/v1"}})
+        e = self.env()
+        del e["KEMORY_API_KEY"]
+        r = subprocess.run([str(SCRIPTS / "mcp.sh")], input="", text=True,
+                           capture_output=True, env=e)
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("no credential", r.stderr)
+        self.assertNotIn("standing down", r.stderr)
+
+
 class FixtureCoverage(unittest.TestCase):
     """Every registered hook event must have a captured payload behind it.
 
