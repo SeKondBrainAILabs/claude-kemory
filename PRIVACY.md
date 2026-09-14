@@ -60,11 +60,12 @@ crosses to another organisation. You can widen a memory to `team` or
 `org-public` yourself.
 
 The hosted service builds the namespace summaries that context injection reads
-by sending memory content to an LLM sub-processor — Groq and OpenRunner are
-the ones currently
-[listed](https://docs.sekondbrain.ai/subprocessors/). Embeddings are computed
-with a local model and do not leave the service. On a self-hosted instance
-both are whatever you configured. The plugin itself adds no sub-processor.
+by sending memory content to an LLM sub-processor — Groq, on the paths this
+plugin uses. Embeddings are computed with a local model and do not leave the
+service. On a self-hosted instance both are whatever you configured, and the
+plugin itself adds no sub-processor. The
+[sub-processor list](https://docs.sekondbrain.ai/subprocessors/) is the
+authoritative record and covers the whole platform, not just this plugin.
 
 One thing to be aware of: injected context becomes part of your Claude Code
 conversation, so it reaches Anthropic on the same terms as anything else you
