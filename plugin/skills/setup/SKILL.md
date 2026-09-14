@@ -24,6 +24,12 @@ writes `~/.kemory/credentials-<env>` — the same file the Kemory CLI writes, so
 a CLI installed later finds them already signed in. Restart the client fully
 afterwards; closing the window is not enough.
 
+**`Unknown command: /kemory:login` means the plugin is installed but not loaded
+yet**, not that the install failed — `/plugin install` prints "Run
+/reload-plugins to apply" and the commands appear only after that. In the
+Desktop app and the IDE extensions there is no `/plugin` at all: install from a
+terminal, then restart the app fully.
+
 With none of them, the bundled server does not start and says why on stderr.
 `/kemory:status` reports the same thing without reading logs.
 
