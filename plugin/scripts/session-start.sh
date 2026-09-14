@@ -37,6 +37,9 @@ Kemory is this user's persistent memory, shared across their AIs and sessions.
 - Write the moment they state a preference, a decision is reached, or you
   learn something non-obvious. Do not ask whether to save it — save it, then
   say in one line what you stored and where.
+- Where: personal ways of working in a user-scoped namespace, project facts
+  in a shared one. Call kemory_list_namespaces and reuse what is already
+  there rather than inventing a near-duplicate.
 - Write in the words the thing would be searched for later: identifiers,
   error strings and names you actually used, not a paraphrase.
 TXT
@@ -46,8 +49,51 @@ export KEMORY_INSTRUCTION
 # summaries are built: no credential, no curl, an unreachable API, an empty
 # vault. Those are exactly the sessions of a new user, who needs it most.
 emit_instruction_only() {
-  python3 -c 'import json, os; print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": os.environ["KEMORY_INSTRUCTION"]}}))' 2>/dev/null
+  python3 -c 'import json, os
+out = {"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": os.environ["KEMORY_INSTRUCTION"]}}
+if os.environ.get("KEMORY_PASTED_AT"):
+    out["systemMessage"] = os.environ["KEMORY_PASTE_NOTICE"]
+print(json.dumps(out))' 2>/dev/null
 }
+
+# The docs told people to paste a standing instruction into CLAUDE.md long
+# before the plugin shipped one. Both is not harmful, but the pasted copy
+# tells the agent to open each session with list_namespaces + recall — work
+# prompt-recall.sh has already done by then, so it costs two tool calls a
+# session to repeat it. Say so once; never edit their file.
+KEMORY_PASTE_MARKS='Kemory memory tools|kemory_list_namespaces|Kemory is my long-term memory'
+
+find_pasted_instruction() {
+  [ "${KEMORY_QUIET_SETUP:-0}" = "1" ] && return 0
+  command -v grep >/dev/null 2>&1 || return 0
+
+  local stamp="$HOME/.kemory/.paste-hint" found=""
+  if [ -f "$stamp" ]; then
+    local now age
+    now=$(date +%s)
+    age=$(( now - $(stat -f %m "$stamp" 2>/dev/null || stat -c %Y "$stamp" 2>/dev/null || echo "$now") ))
+    [ "$age" -lt 604800 ] && return 0   # a week; this is housekeeping, not a fault
+  fi
+
+  local cwd f
+  cwd="$(printf '%s' "$PAYLOAD" | python3 -c 'import json,sys; print((json.load(sys.stdin).get("cwd") or ""))' 2>/dev/null)"
+  for f in "$HOME/.claude/CLAUDE.md" "${cwd:+$cwd/CLAUDE.md}"; do
+    [ -n "$f" ] && [ -r "$f" ] || continue
+    if grep -qE "$KEMORY_PASTE_MARKS" "$f" 2>/dev/null; then found="$f"; break; fi
+  done
+  [ -n "$found" ] || return 0
+
+  mkdir -p "$(dirname "$stamp")" 2>/dev/null && touch "$stamp" 2>/dev/null
+  printf '%s' "$found"
+}
+
+# Set once, read by every emitter below: the file holding a hand-pasted copy
+# of the instruction, or empty.
+KEMORY_PASTED_AT="$(find_pasted_instruction)"
+export KEMORY_PASTED_AT
+KEMORY_PASTE_NOTICE="Kemory plugin: $KEMORY_PASTED_AT still contains a pasted memory instruction. The plugin now ships one, and the pasted copy asks the agent to open every session with list_namespaces + recall — which the prompt-recall hook has already done by then. Removing it saves two tool calls a session. Silence this with KEMORY_QUIET_SETUP=1."
+export KEMORY_PASTE_NOTICE
+
 
 emit_setup_hint() {
   [ "${KEMORY_QUIET_SETUP:-0}" = "1" ] && exit 0
@@ -98,6 +144,8 @@ command -v python3 >/dev/null 2>&1 || exit 0
 KEMORY_RESP="$RESP" \
 KEMORY_PAYLOAD="$PAYLOAD" \
 KEMORY_INSTRUCTION="$KEMORY_INSTRUCTION" \
+KEMORY_PASTED_AT="$KEMORY_PASTED_AT" \
+KEMORY_PASTE_NOTICE="$KEMORY_PASTE_NOTICE" \
 KEMORY_MAX_CHARS="${KEMORY_CONTEXT_MAX_CHARS:-4000}" \
 KEMORY_NAMESPACES="${KEMORY_CONTEXT_NAMESPACES:-}" \
 python3 <<'PY' 2>/dev/null
@@ -115,10 +163,15 @@ def emit(context):
     """
     body = "\n\n".join(p for p in (INSTRUCTION, context) if p)
     if body:
-        print(json.dumps({"hookSpecificOutput": {
+        out = {"hookSpecificOutput": {
             "hookEventName": "SessionStart",
             "additionalContext": body,
-        }}))
+        }}
+        # Housekeeping, not a fault: the user has a working setup and one
+        # redundant file. Throttled to weekly by the caller.
+        if os.environ.get("KEMORY_PASTED_AT"):
+            out["systemMessage"] = os.environ.get("KEMORY_PASTE_NOTICE", "")
+        print(json.dumps(out))
     raise SystemExit(0)
 
 

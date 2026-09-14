@@ -74,9 +74,16 @@ type there.
 
 ## Local files
 
-`~/.kemory/.captured/` and `~/.kemory/.nudged/` holds per-session digest hashes for de-duplication and
-`~/.kemory/.setup-hint` holds a timestamp. Neither contains conversation
-content. The plugin never writes credentials anywhere and never logs them.
+`~/.kemory/.captured/` and `~/.kemory/.nudged/` hold per-session hashes used to
+avoid storing or asking twice; `~/.kemory/.setup-hint` and
+`~/.kemory/.paste-hint` hold timestamps that throttle one-off notices. None
+contains conversation content. The plugin never writes credentials anywhere and
+never logs them.
+
+At session start the plugin also **reads** `~/.claude/CLAUDE.md` and a
+`CLAUDE.md` in the current directory, looking only for a hand-pasted copy of
+the Kemory instruction so it can tell you the plugin now ships one. The file
+contents are never sent anywhere, never stored, and never edited.
 
 ## Contact
 
