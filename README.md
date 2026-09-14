@@ -156,6 +156,7 @@ plugin/
 └── scripts/                      one script per hook, plus lib and redact
 ```
 
-This repo is the Claude Code integration only. Apache-2.0. The open-source
-server, MCP tools and CLI are in
+Everything here is the plugin itself — one tree, a manifest per host, rather
+than a repository per host. Apache-2.0. The open-source server, MCP tools and
+CLI are in
 [kemory-community](https://github.com/SeKondBrainAILabs/kemory-community).
