@@ -80,6 +80,9 @@ class McpRecorder(http.server.BaseHTTPRequestHandler):
     requests: list = []
     status: int = 200
     result: dict = {"tools": [{"name": "kemory_recall"}]}
+    # Set to hand out an Mcp-Session-Id on the first reply, as a stateful
+    # server would. None means the stateless endpoint we actually have today.
+    issue_session: str | None = None
 
     def do_POST(self):
         n = int(self.headers.get("Content-Length", 0))
@@ -91,6 +94,8 @@ class McpRecorder(http.server.BaseHTTPRequestHandler):
         McpRecorder.requests.append((self.headers, body, self.path))
         self.send_response(McpRecorder.status)
         self.send_header("Content-Type", "application/json")
+        if McpRecorder.issue_session:
+            self.send_header("Mcp-Session-Id", McpRecorder.issue_session)
         self.end_headers()
         if McpRecorder.status != 200:
             self.wfile.write(b'{"detail":"nope"}')
@@ -1274,6 +1279,7 @@ class McpEntryTest(unittest.TestCase):
 
     def setUp(self):
         McpRecorder.requests.clear()
+        McpRecorder.issue_session = None
         self.home = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.home, ignore_errors=True)
         # A stub `kemory` on PATH would be launched with exec, so the CLI branch
@@ -1396,6 +1402,25 @@ class McpEntryTest(unittest.TestCase):
         self.assertEqual(json.loads(r.stdout.strip())["id"], 1)
         self.assertTrue(McpRecorder.requests, "went to the configured host")
 
+    def test_session_id_is_echoed_on_later_requests(self):
+        # The endpoint is stateless today. If it ever issues a session id, a
+        # relay that dropped it would break every call after the first, and
+        # nothing in a stateless test would notice.
+        McpRecorder.issue_session = "sess-abc"
+        r = self.run_mcp([self.REQ, self.REQ], KEMORY_API_KEY="k")
+        self.assertEqual(len(r.stdout.strip().splitlines()), 2)
+        first, second = McpRecorder.requests
+        self.assertIsNone(first[0].get("Mcp-Session-Id"),
+                          "nothing to send before the server has issued one")
+        self.assertEqual(second[0].get("Mcp-Session-Id"), "sess-abc")
+
+    def test_stateless_server_gets_no_session_header(self):
+        r = self.run_mcp([self.REQ, self.REQ], KEMORY_API_KEY="k")
+        self.assertEqual(len(McpRecorder.requests), 2)
+        for headers, _, _ in McpRecorder.requests:
+            self.assertIsNone(headers.get("Mcp-Session-Id"),
+                              "a header the server never issued must not appear")
+
     def test_entry_guard_rejects_a_static_credential(self):
         # The guard is what stops a fourth transport rewrite from shipping.
         import shutil as _shutil
@@ -1422,6 +1447,114 @@ class McpEntryTest(unittest.TestCase):
         self.assertEqual(r.returncode, 1,
                          "the http entry this release replaced must not pass again")
         self.assertIn("http entry", r.stdout)
+
+
+class StaleVersionNoticeTest(unittest.TestCase):
+    """Telling a user their install is behind.
+
+    Nothing did. A 0.1.3 install ran for two weeks and three releases without
+    the prompt-recall hook and looked healthy throughout.
+    """
+
+    def setUp(self):
+        self.home = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.home, ignore_errors=True)
+
+    def marketplace(self, version, name="kemory", dirname="kemory"):
+        d = (pathlib.Path(self.home) / ".claude/plugins/marketplaces"
+             / dirname / ".claude-plugin")
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "marketplace.json").write_text(json.dumps(
+            {"plugins": [{"name": name, "version": version}]}))
+
+    def run_session_start(self, **extra):
+        e = {k: v for k, v in os.environ.items() if not k.startswith("KEMORY_")}
+        e.update({"HOME": self.home, "KEMORY_URL": "http://127.0.0.1:1"})
+        e.update(extra)
+        return subprocess.run([str(SCRIPTS / "session-start.sh")], input="{}",
+                              text=True, capture_output=True, env=e)
+
+    def message(self, r):
+        try:
+            return json.loads(r.stdout or "{}").get("systemMessage", "")
+        except ValueError:
+            return ""
+
+    def installed_version(self):
+        return json.loads((ROOT / "plugin" / ".claude-plugin"
+                           / "plugin.json").read_text())["version"]
+
+    def test_says_so_when_the_marketplace_is_ahead(self):
+        self.marketplace("99.0.0")
+        msg = self.message(self.run_session_start())
+        self.assertIn("99.0.0 available", msg)
+        self.assertIn(self.installed_version(), msg)
+        self.assertIn("/plugin update", msg, "a notice must name the remedy")
+
+    def test_silent_when_up_to_date(self):
+        self.marketplace(self.installed_version())
+        self.assertNotIn("available", self.message(self.run_session_start()))
+
+    def test_silent_when_the_marketplace_clone_is_behind(self):
+        # A clone nobody refreshed must not be read as authoritative; failing
+        # quiet is the right direction for a convenience check.
+        self.marketplace("0.0.1")
+        self.assertNotIn("available", self.message(self.run_session_start()))
+
+    def test_compares_numerically_not_as_text(self):
+        self.marketplace("0.10.0")
+        msg = self.message(self.run_session_start())
+        # 0.10.0 beats every 0.x.y this plugin has shipped, and a string
+        # compare would rank it below 0.4.0.
+        self.assertIn("0.10.0 available", msg)
+
+    def test_matches_the_plugin_not_the_directory(self):
+        # A user may add the marketplace under any name.
+        self.marketplace("99.0.0", dirname="my-own-name")
+        self.assertIn("99.0.0 available", self.message(self.run_session_start()))
+
+    def test_ignores_another_plugin_in_the_same_marketplace(self):
+        self.marketplace("99.0.0", name="something-else")
+        self.assertNotIn("available", self.message(self.run_session_start()))
+
+    def test_throttled_to_once_a_day(self):
+        self.marketplace("99.0.0")
+        self.assertIn("available", self.message(self.run_session_start()))
+        self.assertNotIn("available", self.message(self.run_session_start()),
+                         "a notice every session is nagging, not informing")
+
+    def test_quiet_flag_silences_it(self):
+        self.marketplace("99.0.0")
+        r = self.run_session_start(KEMORY_QUIET_SETUP="1")
+        self.assertNotIn("available", self.message(r))
+
+    def test_reaches_a_user_with_no_hook_credential(self):
+        # Connector-only users have no hook credential on purpose and hit the
+        # setup-hint branch every day. They were the population the old
+        # bundled entry stranded; they must still hear that the plugin moved.
+        self.marketplace("99.0.0")
+        msg = self.message(self.run_session_start())
+        self.assertIn("no credential", msg, "the setup hint still leads")
+        self.assertIn("99.0.0 available", msg)
+
+    def test_no_marketplace_clone_is_silent(self):
+        self.assertNotIn("available", self.message(self.run_session_start()))
+
+    def test_malformed_marketplace_does_not_break_the_session(self):
+        d = (pathlib.Path(self.home) / ".claude/plugins/marketplaces/kemory"
+             / ".claude-plugin")
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "marketplace.json").write_text("{not json")
+        r = self.run_session_start()
+        self.assertEqual(r.returncode, 0)
+        self.assertNotIn("available", self.message(r))
+
+    def test_the_instruction_still_ships_alongside_the_notice(self):
+        # The notice shares one systemMessage slot; it must not displace the
+        # standing instruction, which rides in additionalContext.
+        self.marketplace("99.0.0")
+        out = json.loads(self.run_session_start().stdout or "{}")
+        self.assertIn("additionalContext", out.get("hookSpecificOutput", {}))
 
 
 class McpConfigCountTest(unittest.TestCase):
