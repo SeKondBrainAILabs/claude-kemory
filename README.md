@@ -1,8 +1,13 @@
 # kemory-plugin
 
-The Kemory plugin for **Claude Code**. Persistent, cross-session memory, powered by
+Persistent, cross-session memory for coding agents, powered by
 [Kemory](https://kemory.sekondbrain.ai). Works with hosted Kemory and the
 open-source [community edition](https://github.com/SeKondBrainAILabs/kemory-community).
+
+One plugin, one tree, a manifest per host: `.claude-plugin/plugin.json` for
+Claude Code and `.grok-plugin/plugin.json` for Grok Build, both carrying the
+same version. Claude Code is the host it is installed and tested on today; the
+Grok Build catalog entry is in review.
 
 An MCP server gives an agent memory *tools*. This plugin makes it actually use
 them: relevant memories arrive under every prompt, a turn that settles
@@ -151,7 +156,7 @@ plugin/
 └── scripts/                      one script per hook, plus lib and redact
 ```
 
-Everything here is the Claude Code integration; plugins for other hosts will
-live alongside it rather than in repositories of their own. Apache-2.0. The
-open-source server, MCP tools and CLI are in
+Everything here is the plugin itself — one tree, a manifest per host, rather
+than a repository per host. Apache-2.0. The open-source server, MCP tools and
+CLI are in
 [kemory-community](https://github.com/SeKondBrainAILabs/kemory-community).

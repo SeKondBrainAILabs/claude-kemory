@@ -6,15 +6,26 @@ All notable changes to this project are documented here. This project follows
 ## [0.6.1] — 2026-09-14
 
 ### Changed
-- **The repository is now `SeKondBrainAILabs/kemory-plugin`**, and every
-  reference follows it: the install command, the plugin manifest's `homepage`
-  and author URL, `NOTICE`, and the links out of both READMEs. GitHub redirects
-  the old path, so an existing install keeps working and `/plugin update` still
-  resolves — but a reader landing on the old name would see a repository that
-  redirects, which is one more thing to wonder about.
+- **Renamed the repository to `kemory-plugin`, and it now carries a manifest
+  per host.** The name said `claude-kemory` while the thing inside is the
+  plugin format several agent hosts read — the same disagreement between name
+  and content that the previous rename was meant to end, arriving from the
+  other direction once a second host appeared. GitHub redirects the old path,
+  so an existing `/plugin marketplace add` keeps working, but the new name is
+  what the docs and any catalog entry should use.
 
-  The rename anticipates integrations for other hosts living here too, rather
-  than one repository per host.
+  `plugin/.grok-plugin/plugin.json` joins `plugin/.claude-plugin/plugin.json`.
+  Both are the same manifest; the hooks, skills, commands and MCP entry under
+  `plugin/` are shared, and `${CLAUDE_PLUGIN_ROOT}` stays as it is — it is what
+  the hosts resolve, not a Claude-only spelling.
+
+### Added
+- **`scripts/check.sh` fails if the two manifests drift.** Nothing at runtime
+  reads both, so a bump applied to one and not the other would ship a version
+  that disagrees with itself, and the host reading the stale manifest would
+  never see the update: every marketplace carrying this plugin gates on the
+  version string, not the commit. The check asserts the two files are
+  identical and that all three manifests agree on the version.
 
 ## [0.6.0] — 2026-09-14
 
