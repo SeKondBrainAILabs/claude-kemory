@@ -3,6 +3,31 @@
 All notable changes to this project are documented here. This project follows
 [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] — 2026-09-14
+
+### Added
+- **The standing instruction ships with the plugin.** Until now the plugin
+  made an agent *read* memory but left *writing* to a paragraph the user had
+  to paste into `CLAUDE.md` themselves — per-machine, per-repo, silently
+  absent in a new project, and drifting from the docs the day either changed.
+  `session-start.sh` now injects it on every session, including a brand-new
+  vault, an unreachable API and a user with no hook credential; those paths
+  previously returned nothing at all. It is deliberately short: recall and the
+  write prompt are mechanisms now, so it states only what no hook can.
+- **Store nudge (`KEMORY_STORE_NUDGE=1`, off by default).** A `Stop` hook that
+  fires when a turn settled something durable and no Kemory write happened,
+  asking for the write before the turn ends. This is the only thing in the
+  plugin that makes a write *happen* rather than hoping for one. It emits
+  `hookSpecificOutput.additionalContext`, not `decision: "block"` — the hooks
+  reference says both run the same continuation loop and the same loop
+  protections, but the former is shown as hook feedback rather than a hook
+  error, which is what guidance should look like. Gated on decision-shaped
+  phrasing, silent when the turn already stored, and once per turn.
+
+### Notes
+- Off by default for one release. A hook that continues a turn is disruptive
+  when it is wrong, so the false-positive rate gets measured on real sessions
+  before it is considered for on-by-default.
 ## [0.2.10] — 2026-09-14
 
 ### Fixed

@@ -5,14 +5,19 @@ Persistent, cross-session memory for Claude Code, powered by
 open-source [community edition](https://github.com/SeKondBrainAILabs/kemory-community).
 
 An MCP server gives an agent memory *tools*. This plugin makes it actually use
-them: relevant memories arrive under every prompt, recalls get rated so
+them: relevant memories arrive under every prompt, a turn that settles
+something durable does not end with it unwritten, recalls get rated so
 retrieval improves instead of decaying, and nothing is sent that you did not
 turn on.
 
 ## Features
 
+- **Standing instruction** — ships with the plugin, so there is nothing to
+  paste into `CLAUDE.md` and nothing to keep in sync per project
 - **Prompt recall** — every prompt is searched against your vault and the
   matches arrive before the agent answers, without it deciding to look
+- **Store nudge** — *opt-in.* When a turn reached a decision and stored
+  nothing, the turn does not just end
 - **Context injection** — your namespace summaries load at session start
 - **Rate reminder** — the agent rates the memories it used, so retrieval keeps
   improving
@@ -83,7 +88,13 @@ the version you are on, and [CHANGELOG.md](CHANGELOG.md) says what moved.
 | recall approval | `PreToolUse` | Auto-approves Kemory read tools so memory stops interrupting you | Nothing | on |
 | rate reminder | `PostToolUse` | Prompts the agent to rate the memories it actually used | Nothing | on |
 | consolidate reminder | `SessionStart` after compaction | Prompts the agent to store facts that would otherwise survive only as a summary | Nothing | on |
+| store nudge | `Stop` | When the turn settled something durable and no Kemory write happened, asks for it before the turn ends | Nothing | **off** |
 | session capture | `Stop`, `SessionEnd` | Stores a redacted digest of your own prompts: last 12 turns, 8000 characters | Your prompts, redacted | **off** |
+
+The instruction is injected on every session, including a brand-new vault and
+a session whose context call failed. It is short on purpose: recall and the
+write prompt are hooks now, so it says only what no hook can — what Kemory is,
+and the standard for writing to it.
 
 Plus a `kemory` skill on how to recall, rate, store and phrase memories so
 semantic search finds them again, and a `kemory-setup` skill that walks the
@@ -101,7 +112,13 @@ or `#`.
 ```bash
 export KEMORY_PROMPT_RECALL=0   # stop sending prompt text
 export KEMORY_AUTO_CAPTURE=1    # turn capture on (off by default)
+export KEMORY_STORE_NUDGE=1     # turn the store nudge on (off by default)
 ```
+
+The store nudge reads your transcript on this machine and sends nothing. It is
+off by default anyway: a hook that continues a turn is disruptive when it is
+wrong, so it ships off until the false-positive rate has been measured on real
+sessions.
 
 Storage, retention, deletion, sub-processors and who else can see a memory:
 [PRIVACY.md](PRIVACY.md). The service itself is governed by the

@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
-# SessionStart hook — inject the user's Kemory memory summaries so a session
-# begins already knowing their preferences and project context, instead of
-# starting blind and hoping the agent thinks to call recall.
+# SessionStart hook — inject the standing instruction and the user's Kemory
+# memory summaries, so a session begins already knowing their preferences and
+# project context instead of starting blind and hoping the agent calls recall.
+#
+# The instruction ships WITH the plugin rather than being pasted into
+# CLAUDE.md: a rules file is per-machine or per-repo, drifts from the docs the
+# day either changes, and a new project silently starts without it. Injected
+# here it is unconditional, versioned, and updated by `/plugin update`.
 #
 # Also acts as a preflight: if Kemory is not usable yet, say so once, with the
 # exact command to fix it, rather than failing silently in /mcp.
@@ -19,6 +24,30 @@ PAYLOAD="$(cat 2>/dev/null || true)"
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib.sh disable=SC1091
 . "$DIR/lib.sh"
+
+# Deliberately short. The long standing instruction in the docs is long
+# because it is compensating for the absence of mechanisms: recall it cannot
+# trigger, a write it cannot enforce. Those are hooks now (prompt-recall.sh,
+# store-nudge.sh), so this says only what no hook can say — what Kemory is,
+# and the standard for writing to it.
+read -r -d '' KEMORY_INSTRUCTION <<'TXT'
+Kemory is this user's persistent memory, shared across their AIs and sessions.
+- Check it before answering anything about their work, their decisions, or
+  past sessions, and again when the topic shifts.
+- Write the moment they state a preference, a decision is reached, or you
+  learn something non-obvious. Do not ask whether to save it — save it, then
+  say in one line what you stored and where.
+- Write in the words the thing would be searched for later: identifiers,
+  error strings and names you actually used, not a paraphrase.
+TXT
+export KEMORY_INSTRUCTION
+
+# Emit the instruction on its own, for every path that returns before the
+# summaries are built: no credential, no curl, an unreachable API, an empty
+# vault. Those are exactly the sessions of a new user, who needs it most.
+emit_instruction_only() {
+  python3 -c 'import json, os; print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": os.environ["KEMORY_INSTRUCTION"]}}))' 2>/dev/null
+}
 
 emit_setup_hint() {
   [ "${KEMORY_QUIET_SETUP:-0}" = "1" ] && exit 0
@@ -50,32 +79,53 @@ emit_setup_hint() {
       msg="Kemory plugin: the hooks have no credential, so context injection, prompt recall, rating and capture are off. Your MCP memory tools may already be working \u2014 they authenticate separately. Quickest fix: export KEMORY_API_KEY with a key from kemory.sekondbrain.ai. Or install the kemory CLI and run \`kemory login\` \u2014 see the plugin README for how to get it."
     fi
   fi
-  KEMORY_MSG="$msg" python3 -c 'import json, os; print(json.dumps({"systemMessage": os.environ["KEMORY_MSG"].encode().decode("unicode_escape") + " Silence this with KEMORY_QUIET_SETUP=1."}))' 2>/dev/null \
+  KEMORY_MSG="$msg" python3 -c 'import json, os; print(json.dumps({"systemMessage": os.environ["KEMORY_MSG"].encode().decode("unicode_escape") + " Silence this with KEMORY_QUIET_SETUP=1.", "hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": os.environ["KEMORY_INSTRUCTION"]}}))' 2>/dev/null \
     || printf '%s\n' '{"systemMessage":"Kemory plugin: the hooks have no credential, so context injection, recall, rating and capture are off. Run kemory login, or export KEMORY_API_KEY. Silence this with KEMORY_QUIET_SETUP=1."}'
   exit 0
 }
 
 kemory_resolve_auth || emit_setup_hint
-command -v curl >/dev/null 2>&1 || exit 0
+command -v curl >/dev/null 2>&1 || { emit_instruction_only; exit 0; }
 
 DEPTH="${KEMORY_CONTEXT_DEPTH:-l3}"
 RESP="$(curl -s --max-time "${KEMORY_CONTEXT_TIMEOUT:-6}" \
   -H "$KEMORY_AUTH_HEADER" \
-  "$KEMORY_BASE_URL/api/v1/user/context?depth=$DEPTH" 2>/dev/null)" || exit 0
-[ -n "$RESP" ] || exit 0
+  "$KEMORY_BASE_URL/api/v1/user/context?depth=$DEPTH" 2>/dev/null)" \
+  || { emit_instruction_only; exit 0; }
+[ -n "$RESP" ] || { emit_instruction_only; exit 0; }
 
 command -v python3 >/dev/null 2>&1 || exit 0
 KEMORY_RESP="$RESP" \
 KEMORY_PAYLOAD="$PAYLOAD" \
+KEMORY_INSTRUCTION="$KEMORY_INSTRUCTION" \
 KEMORY_MAX_CHARS="${KEMORY_CONTEXT_MAX_CHARS:-4000}" \
 KEMORY_NAMESPACES="${KEMORY_CONTEXT_NAMESPACES:-}" \
 python3 <<'PY' 2>/dev/null
 import json, os, sys
 
+INSTRUCTION = os.environ.get("KEMORY_INSTRUCTION", "").strip()
+
+
+def emit(context):
+    """Print one SessionStart payload. The instruction always leads it.
+
+    Every exit below used to be `sys.exit(0)`, which meant a user with an
+    empty vault, a stale token or an unreachable API got no instruction at
+    all — the sessions where it matters most.
+    """
+    body = "\n\n".join(p for p in (INSTRUCTION, context) if p)
+    if body:
+        print(json.dumps({"hookSpecificOutput": {
+            "hookEventName": "SessionStart",
+            "additionalContext": body,
+        }}))
+    raise SystemExit(0)
+
+
 try:
     data = json.loads(os.environ["KEMORY_RESP"])
 except Exception:
-    sys.exit(0)
+    emit("")
 
 try:
     source = (json.loads(os.environ.get("KEMORY_PAYLOAD") or "{}")
@@ -94,13 +144,9 @@ CONSOLIDATE = (
 
 namespaces = data.get("namespaces")
 if not isinstance(namespaces, list):
-    # Not the expected shape — most likely an auth error body. Stay silent,
-    # except after a compaction, where the nudge stands on its own.
-    if compacted:
-        print(json.dumps({"hookSpecificOutput": {
-            "hookEventName": "SessionStart",
-            "additionalContext": CONSOLIDATE}}))
-    sys.exit(0)
+    # Not the expected shape — most likely an auth error body. No summaries to
+    # show, but the instruction still stands, and so does the compaction nudge.
+    emit(CONSOLIDATE if compacted else "")
 
 wanted = {n.strip() for n in os.environ["KEMORY_NAMESPACES"].split(",") if n.strip()}
 lines = []
@@ -115,11 +161,9 @@ for ns in namespaces:
     lines.append(f"- [{name}] {summary}")
 
 if not lines:
-    if compacted:
-        print(json.dumps({"hookSpecificOutput": {
-            "hookEventName": "SessionStart",
-            "additionalContext": CONSOLIDATE}}))
-    sys.exit(0)
+    # An empty vault is a new user. They get the instruction, which is the
+    # whole reason they would ever have something to summarise later.
+    emit(CONSOLIDATE if compacted else "")
 
 budget = max(500, int(os.environ["KEMORY_MAX_CHARS"]))
 body, used, truncated = [], 0, False
@@ -130,7 +174,7 @@ for line in lines:
     body.append(line)
     used += len(line)
 if not body:
-    sys.exit(0)
+    emit(CONSOLIDATE if compacted else "")
 
 context = (
     "Your Kemory memory (persistent across sessions) — namespace summaries:\n"
@@ -148,11 +192,6 @@ context += (
     "re-deriving anything, and rate what you use with kemory_rate_memory."
 )
 
-print(json.dumps({
-    "hookSpecificOutput": {
-        "hookEventName": "SessionStart",
-        "additionalContext": context,
-    }
-}))
+emit(context)
 PY
 exit 0

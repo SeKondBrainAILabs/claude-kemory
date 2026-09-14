@@ -198,6 +198,163 @@ class HookTest(unittest.TestCase):
         self.assertNotIn("system-reminder", body["content"])
         self.assertEqual(body["metadata"]["turns"], 1)
 
+
+    # --- standing instruction (SessionStart) -------------------------------
+    INSTRUCTION_MARK = "Kemory is this user's persistent memory"
+
+    def _start(self, **env):
+        r = self.run_script("session-start.sh", {"source": "startup"},
+                            KEMORY_API_KEY="k", **env)
+        return json.loads(r.stdout) if r.stdout.strip() else {}
+
+    def _injected(self, out):
+        return (out.get("hookSpecificOutput") or {}).get("additionalContext", "")
+
+    def test_instruction_ships_with_the_summaries(self):
+        Recorder.get_payload = {"namespaces": [
+            {"namespace": "shared", "summary": "prefers uv"}]}
+        ctx = self._injected(self._start())
+        self.assertIn(self.INSTRUCTION_MARK, ctx)
+        self.assertIn("prefers uv", ctx)
+
+    def test_instruction_reaches_an_empty_vault(self):
+        # The whole point: a new user has no summaries, and is the one who most
+        # needs telling that memory exists and when to write to it.
+        Recorder.get_payload = {"namespaces": []}
+        self.assertIn(self.INSTRUCTION_MARK, self._injected(self._start()))
+
+    def test_instruction_survives_an_unusable_api_response(self):
+        Recorder.get_payload = {"detail": "Not authenticated"}
+        self.assertIn(self.INSTRUCTION_MARK, self._injected(self._start()))
+
+    def test_instruction_reaches_a_user_with_no_hook_credential(self):
+        # No credential means the hooks are off, but the MCP tools may well be
+        # working through a connector, so the instruction still applies.
+        r = self.run_script("session-start.sh", {"source": "startup"})
+        out = json.loads(r.stdout)
+        self.assertIn("systemMessage", out)
+        self.assertIn(self.INSTRUCTION_MARK, self._injected(out))
+
+    def test_instruction_names_the_write_trigger_not_just_recall(self):
+        # A read-only instruction is what the plugin already shipped; the
+        # missing half is being told to write without being asked.
+        Recorder.get_payload = {"namespaces": []}
+        ctx = self._injected(self._start())
+        self.assertIn("Do not ask whether to save", ctx)
+
+    # --- store nudge (Stop) ------------------------------------------------
+    def turn(self, *events):
+        p = pathlib.Path(tempfile.mktemp(suffix=".jsonl", dir=self.home))
+        p.write_text("".join(json.dumps(e) + "\n" for e in events))
+        return str(p)
+
+    @staticmethod
+    def user(text):
+        return {"type": "user", "message": {"content": text}}
+
+    @staticmethod
+    def assistant(text=None, tool=None):
+        blocks = []
+        if text:
+            blocks.append({"type": "text", "text": text})
+        if tool:
+            blocks.append({"type": "tool_use", "name": tool, "input": {}})
+        return {"type": "assistant", "message": {"content": blocks}}
+
+    DECISION = [
+        {"type": "user", "message": {"content": "redis or postgres for the queue?"}},
+        {"type": "assistant", "message": {"content": [
+            {"type": "text", "text": "We'll use postgres — one writer, no extra failure domain."}]}},
+    ]
+
+    def _nudge(self, events, **payload):
+        body = {"session_id": "s", "hook_event_name": "Stop",
+                "transcript_path": self.turn(*events)}
+        body.update(payload)
+        r = self.run_script("store-nudge.sh", body,
+                            KEMORY_API_KEY="k", KEMORY_STORE_NUDGE="1")
+        return r.stdout.strip()
+
+    def test_nudge_is_off_by_default(self):
+        r = self.run_script("store-nudge.sh",
+                            {"session_id": "s", "hook_event_name": "Stop",
+                             "transcript_path": self.turn(*self.DECISION)},
+                            KEMORY_API_KEY="k")
+        self.assertEqual(r.stdout, "", "a turn-continuing hook must be opt-in")
+
+    def test_nudge_fires_when_a_decision_went_unstored(self):
+        out = json.loads(self._nudge(self.DECISION))
+        hook = out["hookSpecificOutput"]
+        self.assertEqual(hook["hookEventName"], "Stop")
+        self.assertIn("kemory_store_memory", hook["additionalContext"])
+
+    def test_nudge_is_feedback_not_a_block(self):
+        # decision:"block" surfaces as a hook ERROR; additionalContext runs the
+        # same continuation loop and reads as guidance. A false positive on the
+        # first shape is what makes a hook get uninstalled.
+        out = json.loads(self._nudge(self.DECISION))
+        self.assertNotIn("decision", out)
+
+    def test_nudge_is_silent_when_the_turn_already_stored(self):
+        events = self.DECISION + [self.assistant(tool="mcp__kemory__kemory_store_memory")]
+        self.assertEqual(self._nudge(events), "")
+
+    def test_nudge_is_silent_when_a_write_alias_was_used(self):
+        # kemory_memory is an alias of kemory_store_memory and reads like a read.
+        events = self.DECISION + [self.assistant(tool="mcp__x__kemory_memory")]
+        self.assertEqual(self._nudge(events), "")
+
+    def test_a_recall_does_not_count_as_having_stored(self):
+        events = self.DECISION + [self.assistant(tool="mcp__x__kemory_recall_memory")]
+        self.assertNotEqual(self._nudge(events), "")
+
+    def test_nudge_is_silent_on_an_ordinary_turn(self):
+        events = [self.user("run the tests again"),
+                  self.assistant(text="All 85 passed.")]
+        self.assertEqual(self._nudge(events), "")
+
+    def test_discussing_an_option_is_not_a_decision(self):
+        events = [self.user("could we use redis here?"),
+                  self.assistant(text="Redis is one option; it adds a failure domain.")]
+        self.assertEqual(self._nudge(events), "")
+
+    def test_nudge_respects_the_loop_guard(self):
+        self.assertEqual(self._nudge(self.DECISION, stop_hook_active=True), "")
+
+    def test_nudge_fires_once_per_turn(self):
+        events = self.DECISION
+        t = self.turn(*events)
+        body = {"session_id": "s", "hook_event_name": "Stop", "transcript_path": t}
+        first = self.run_script("store-nudge.sh", body,
+                                KEMORY_API_KEY="k", KEMORY_STORE_NUDGE="1")
+        second = self.run_script("store-nudge.sh", body,
+                                 KEMORY_API_KEY="k", KEMORY_STORE_NUDGE="1")
+        self.assertNotEqual(first.stdout.strip(), "")
+        self.assertEqual(second.stdout.strip(), "",
+                         "re-nudging the same material is how a hook gets uninstalled")
+
+    def test_nudge_reads_the_last_assistant_message_from_the_payload(self):
+        # The decision may be in the message that is still being written when
+        # Stop fires, so the payload copy is the reliable source.
+        events = [self.user("which db?")]
+        out = self._nudge(events,
+                          last_assistant_message="We'll use postgres for the queue.")
+        self.assertNotEqual(out, "")
+
+    def test_nudge_survives_a_missing_transcript(self):
+        r = self.run_script("store-nudge.sh",
+                            {"session_id": "s", "hook_event_name": "Stop",
+                             "transcript_path": "/nonexistent/x.jsonl"},
+                            KEMORY_API_KEY="k", KEMORY_STORE_NUDGE="1")
+        self.assertEqual(r.returncode, 0)
+        self.assertEqual(r.stdout, "")
+
+    def test_nudge_is_registered_on_stop_only(self):
+        hooks = json.loads((ROOT / "plugin" / "hooks" / "hooks.json").read_text())["hooks"]
+        where = {e for ev, entries in hooks.items() for g in entries
+                 for h in g["hooks"] if "store-nudge.sh" in h["command"] for e in [ev]}
+        self.assertEqual(where, {"Stop"})
+
     # --- redaction --------------------------------------------------------
     SECRETS = [
         "export GH_TOKEN=ghp_AAAAAAAAAAAAAAAAAAAAAAAA",
