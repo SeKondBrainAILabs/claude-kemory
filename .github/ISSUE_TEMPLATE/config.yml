@@ -1,7 +1,7 @@
 blank_issues_enabled: false
 contact_links:
   - name: Security vulnerability
-    url: https://github.com/SeKondBrainAILabs/claude-kemory/blob/main/SECURITY.md
+    url: https://github.com/SeKondBrainAILabs/kemory-plugin/blob/main/SECURITY.md
     about: Do not open a public issue. Report privately to security@sekondbrain.ai.
   - name: Kemory service, API or account
     url: https://docs.sekondbrain.ai/kemory/
