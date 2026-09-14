@@ -9,7 +9,10 @@ Thanks for helping improve the Kemory plugin. By taking part you agree to the
 - Keep hooks **best-effort**: a hook must never block or fail a user's
   session. Exit `0` on every error path.
 - Keep the plugin **no-op safe**: if no Kemory server is connected, or the
-  user has no credentials, nothing should error.
+  user has no credentials, nothing should error. One deliberate exception:
+  `scripts/mcp.sh` exits non-zero with a reason when it finds no credential.
+  A silent no-op there produces an MCP server that looks connected and serves
+  no tools, which hides a misconfiguration instead of reporting it.
 - Anything that sends data anywhere must be **opt-in and documented**.
 
 ## Before opening a PR

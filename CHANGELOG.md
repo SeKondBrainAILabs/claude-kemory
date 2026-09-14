@@ -3,6 +3,53 @@
 All notable changes to this project are documented here. This project follows
 [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] — 2026-09-14
+
+### Changed
+- **The bundled MCP entry resolves a credential at launch instead of carrying
+  a static one.** It now runs `scripts/mcp.sh`, which calls the same
+  `kemory_resolve_auth` in `lib.sh` that every hook uses, then serves through
+  `kemory mcp serve` for a CLI login or through a new bundled stdio-to-HTTP
+  bridge for an environment credential.
+
+  This entry had been rewritten three times — stdio, HTTP, stdio, HTTP — and
+  each rewrite fixed one population by breaking another, because a static
+  entry can only name one of the three ways people reach Kemory. The stdio
+  versions needed the CLI on `PATH`, so a user with only a key got no tools.
+  The HTTP versions sent `X-API-Key: ${KEMORY_API_KEY}`, so a user who signed
+  in with `kemory login`, or who uses the claude.ai connector, sent an empty
+  header, got a 401, and was pushed into an OAuth prompt for a server they
+  never chose — a permanently red entry beside working hooks. Resolving at
+  launch ends the cycle rather than swinging it back.
+
+  The invariant is now stated in `.mcp.json`'s guard and enforced by
+  `check.sh`: **one entry, credential resolved at launch, never a static
+  credential in that file**. The guard rejects the exact HTTP entry this
+  release replaces, so a fourth rewrite fails CI instead of shipping.
+
+- **No credential is now a visible failure.** `mcp.sh` exits non-zero with one
+  line naming the three remedies, including that the connector case is a
+  choice rather than a misconfiguration. The alternative — starting and
+  exposing nothing — reads as connected in `/mcp` while every memory tool is
+  missing. `CONTRIBUTING.md` records this as the one deliberate exception to
+  the plugin's no-op-safe rule.
+
+### Fixed
+- **`/kemory:status` claimed the tools were fine when the entry was dead.** It
+  reported "kemory CLI on PATH — the bundled MCP server can start", which was
+  left from a stdio entry and meaningless under the HTTP one that replaced it:
+  the CLI had nothing to do with whether the tools appeared. It now resolves
+  the credential the way the launcher does and names which bridge would serve,
+  or why none would.
+- **Duplicate MCP entries are counted and named.** Installing the plugin while
+  a hand-written entry from the older docs is still in place means two copies
+  of every tool in each request, and `/mcp` lists both without saying they are
+  the same server twice. `/kemory:status` now counts kemory entries across the
+  MCP configs on disk — by URL as well as by name, since a hand-written one is
+  often called something else — and says to keep one. A claude.ai connector
+  cannot be seen from a shell, so it is named as the case this cannot detect.
+- **`/kemory:status` prints the installed plugin version.** Nothing surfaced
+  it, so an install several releases behind looked identical to a current one.
 ## [0.3.1] — 2026-09-14
 
 ### Changed

@@ -77,16 +77,54 @@ if [ -n "${KEMORY_BASE_URL:-}" ] && command -v curl >/dev/null 2>&1; then
 fi
 
 # --- MCP tools -------------------------------------------------------------
+# Report what actually decides whether the tools appear, not a proxy for it.
+# Until 0.4.0 this printed "kemory CLI on PATH — the bundled MCP server can
+# start", which was left over from a stdio entry; under the http entry that
+# replaced it the CLI was irrelevant, so the line said the tools were fine
+# while the entry was dead. The bundled entry now launches scripts/mcp.sh,
+# which resolves a credential the same way the hooks do — so the honest check
+# is to resolve it here too and name who would serve.
 echo
-echo "TOOLS — the kemory_* MCP tools (a separate credential from the hooks)"
-if command -v kemory >/dev/null 2>&1; then
-  ok "kemory CLI on PATH — the bundled MCP server can start"
+echo "TOOLS — the kemory_* MCP tools"
+if [ -n "${KEMORY_BASE_URL:-}" ]; then
+  if [ -n "${KEMORY_API_KEY:-}" ] || [ -n "${KEMORY_TOKEN:-}" ]; then
+    if command -v python3 >/dev/null 2>&1; then
+      ok "bundled server will start — credential from the environment"
+    else
+      bad "credential found, but python3 is missing and the CLI cannot read it"
+      info "install python3, or run 'kemory login' to use the CLI's own bridge"
+    fi
+  elif command -v kemory >/dev/null 2>&1; then
+    ok "bundled server will start — CLI credential, served by 'kemory mcp serve'"
+  elif command -v python3 >/dev/null 2>&1; then
+    ok "bundled server will start — CLI credential, served by the bundled bridge"
+  else
+    bad "credential found, but neither the kemory CLI nor python3 is available"
+  fi
 else
-  info "kemory CLI not on PATH, so the bundled MCP server will not start"
-  info "that is fine if you connect another way — the Kemory connector, or a"
-  info "custom connector at https://api.kemory.s9n.ai/mcp/v1"
+  bad "bundled server will not start — no credential (same one the hooks need)"
+  info "it exits with that reason rather than appearing connected with no tools"
+  info "using the claude.ai connector for tools? that is fine — disable this"
+  info "server under /mcp so you are not running two"
+fi
+
+# Two servers means two copies of every tool in each request. The connector
+# lives inside Claude and cannot be seen from here, so only on-disk entries are
+# counted and the connector is named as the case this cannot detect.
+others=$(kemory_count_mcp_entries)
+if [ "${others:-0}" -gt 0 ]; then
+  if [ "$others" -eq 1 ]; then noun="entry"; else noun="entries"; fi
+  info "$others other kemory MCP $noun found in your MCP configs"
+  info "more than one means duplicate tools — keep one and remove the rest"
 fi
 info "run /mcp to confirm which kemory server Claude is actually talking to"
+
+# --- plugin version --------------------------------------------------------
+manifest="$DIR/../.claude-plugin/plugin.json"
+if [ -r "$manifest" ] && command -v python3 >/dev/null 2>&1; then
+  installed=$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1])).get("version",""))' "$manifest" 2>/dev/null)
+  [ -n "$installed" ] && info "plugin version $installed — '/plugin update kemory@kemory' to move it"
+fi
 
 # --- capture ---------------------------------------------------------------
 echo

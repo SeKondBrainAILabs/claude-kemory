@@ -10,9 +10,10 @@ the specific failure; the steps below act on what it says.
 
 ## One variable turns on everything
 
-The bundled MCP entry talks to hosted Kemory over HTTP and reads
-`KEMORY_API_KEY` from the environment. The hooks read the same variable. So a
-single export authenticates both halves, and there is nothing to install:
+The bundled MCP entry and the hooks resolve a credential the same way, in this
+order: `KEMORY_API_KEY`, then `KEMORY_TOKEN`, then the CLI's stored login. Any
+one of them turns on both halves. The shortest is an export, which needs
+nothing installed:
 
 ```bash
 export KEMORY_API_KEY="..."   # from your Kemory dashboard
@@ -21,9 +22,8 @@ export KEMORY_API_KEY="..."   # from your Kemory dashboard
 Put it somewhere your shell loads on startup, then restart the client fully —
 closing the window is not enough.
 
-If the variable is unset, Claude Code warns about the unexpanded
-`${KEMORY_API_KEY}` and the server answers 401. That is the signal: the
-credential is missing, not the server.
+With none of them, the bundled server does not start and says why on stderr.
+`/kemory:status` reports the same thing without reading logs.
 
 Self-hosted or community edition: set `KEMORY_URL` to your API base, no
 trailing slash and no path. Both the MCP entry and the hooks honour it.
@@ -38,10 +38,11 @@ kemory login
 kemory connect
 ```
 
-Do that and **disable the bundled server** so two are not running. Run `/mcp`
-to see what is actually connected. Note the hooks still need
-`KEMORY_API_KEY` — they read the CLI credential file too, but only when one
-exists for the environment you are on.
+`kemory login` alone is enough for the bundled server — it reads that same
+credential file and serves through the CLI's bridge. `kemory connect` is for
+other MCP hosts (Cursor, Warp, Claude Desktop); if you run it for Claude Code
+as well, **disable the bundled server** so two are not running. Run `/mcp` to
+see what is actually connected.
 
 Getting the CLI is a separate step; the root README covers Homebrew and the
 direct download.

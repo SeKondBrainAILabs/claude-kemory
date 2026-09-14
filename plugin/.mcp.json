@@ -1,9 +1,7 @@
 {
   "kemory": {
-    "type": "http",
-    "url": "${KEMORY_URL:-https://api.kemory.s9n.ai}/mcp/v1",
-    "headers": {
-      "X-API-Key": "${KEMORY_API_KEY}"
-    }
+    "command": "${CLAUDE_PLUGIN_ROOT}/scripts/mcp.sh",
+    "args": [],
+    "env": {}
   }
 }
