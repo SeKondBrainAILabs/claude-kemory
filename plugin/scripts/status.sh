@@ -109,15 +109,31 @@ else
   info "server under /mcp so you are not running two"
 fi
 
-# Two servers means two copies of every tool in each request. The connector
-# lives inside Claude and cannot be seen from here, so only on-disk entries are
-# counted and the connector is named as the case this cannot detect.
-others=$(kemory_count_mcp_entries)
-if [ "${others:-0}" -gt 0 ]; then
-  if [ "$others" -eq 1 ]; then noun="entry"; else noun="entries"; fi
-  info "$others other kemory MCP $noun found in your MCP configs"
-  info "more than one means duplicate tools — keep one and remove the rest"
+# The launcher stands down when another server already covers this same Kemory,
+# so the status has to say the same thing -- a tick here beside a server that
+# quietly declines to start is exactly the lie this section was fixed for once
+# already.
+duplicate="$(kemory_find_duplicate_server)"
+if [ -n "$duplicate" ] && [ "${KEMORY_ALLOW_DUPLICATE:-0}" != "1" ]; then
+  info "…but it will stand down: '${duplicate%%	*}' in ${duplicate##*	} already"
+  info "serves this same Kemory. Your hooks are unaffected. Remove that entry to"
+  info "use this one instead, or set KEMORY_ALLOW_DUPLICATE=1 to run both."
+elif [ -n "$duplicate" ]; then
+  info "another server ('${duplicate%%	*}') covers this same Kemory, and"
+  info "KEMORY_ALLOW_DUPLICATE=1 is set — you are deliberately running two"
 fi
+
+# Entries for a DIFFERENT Kemory are deliberate multi-env work, not a fault, so
+# they are counted rather than warned about. A claude.ai connector lives inside
+# Claude and is invisible from a shell, which is why it is named here instead.
+others=$(kemory_count_mcp_entries)
+if [ "${others:-0}" -gt 0 ] && [ -z "$duplicate" ]; then
+  if [ "$others" -eq 1 ]; then noun="entry"; else noun="entries"; fi
+  info "$others other kemory MCP $noun on this machine, pointing elsewhere"
+  info "if one of them is meant to be this Kemory, keep a single server"
+fi
+info "using the claude.ai connector as well? that cannot be seen from here —"
+info "disable the bundled server under /mcp so you are not running two"
 info "run /mcp to confirm which kemory server Claude is actually talking to"
 
 # --- plugin version --------------------------------------------------------

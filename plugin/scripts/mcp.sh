@@ -32,6 +32,25 @@ if [ "${KEMORY_TOKEN_EXPIRED:-0}" = "1" ]; then
   exit 1
 fi
 
+# Stand down when this machine already has a server for the same Kemory. Two
+# means two copies of every tool in each request, and the bundled entry is the
+# one that should give way: an entry in a host config was put there on purpose
+# and this one arrives with the plugin. The cost is only the duplicate — the
+# hooks read credentials directly, so recall, injection, rating and capture all
+# keep working while this server stands aside.
+#
+# Loudly. A server that starts and exposes nothing reads as connected in /mcp
+# with every tool missing, which is the failure this whole file exists to avoid.
+if [ "${KEMORY_ALLOW_DUPLICATE:-0}" != "1" ]; then
+  duplicate="$(kemory_find_duplicate_server)"
+  if [ -n "$duplicate" ]; then
+    name="${duplicate%%	*}"
+    where="${duplicate##*	}"
+    echo "kemory: standing down — '$name' in $where already serves this same Kemory, and two servers mean two copies of every tool. Your hooks are unaffected. Keep this one instead? Remove that entry (or run 'claude mcp remove $name'), then restart. Want both anyway? Set KEMORY_ALLOW_DUPLICATE=1." >&2
+    exit 1
+  fi
+fi
+
 # Which credential lib.sh used decides who serves. The CLI bridge reads
 # ~/.kemory/credentials-<env> and ignores KEMORY_API_KEY, so preferring it for
 # an environment credential would silently serve a different account than the

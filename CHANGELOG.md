@@ -3,6 +3,45 @@
 All notable changes to this project are documented here. This project follows
 [Semantic Versioning](https://semver.org/).
 
+## [0.7.0] — 2026-09-14
+
+### Changed
+- **The bundled server now stands down when this machine already has one for
+  the same Kemory.** Three routes each register an MCP server for Claude Code —
+  a pasted pair-claim prompt, `kemory mcp install`, and this plugin — so any two
+  of them leave 29 tools duplicated in every request, with `/mcp` listing both
+  without saying they are the same server twice.
+
+  The bundled entry is the one that gives way: an entry in a host config was put
+  there deliberately, and this one arrives with the plugin. The cost is only the
+  duplicate — the hooks read credentials directly, so recall, context injection,
+  rating and capture all keep working while the server stands aside. It says so
+  in the message, because "your tools moved" and "your memory stopped working"
+  are very different sentences.
+
+  Loudly, never silently: it exits with the reason, names the offending entry
+  and the file it is in, and gives the way back. A server that started and
+  exposed nothing would read as connected in `/mcp` with every tool missing,
+  which is the failure this launcher exists to avoid.
+
+  `KEMORY_ALLOW_DUPLICATE=1` runs both anyway.
+
+### Notes
+- **Same ENDPOINT, not same name.** `kemory mcp install` pins the env in its
+  args precisely so prod and staging can coexist as separate servers, so two
+  entries pointing at different hosts are deliberate multi-env work and are left
+  alone. Each entry is resolved the way the thing that runs it would: an http
+  entry by its own url, a `kemory [--env X] mcp serve` entry through the host in
+  `~/.kemory/credentials-X`.
+- **An entry whose endpoint cannot be worked out is skipped, never guessed at.**
+  The asymmetry decides it: failing to stand down costs duplicated tools,
+  standing down wrongly costs the user their tools entirely.
+- A claude.ai connector still cannot be seen from a shell. `/kemory:status` names
+  that as the case it cannot detect rather than reporting a reassuring zero.
+- `/kemory:status` mirrors the launcher — a tick there beside a server that
+  quietly declines to start is the exact lie that section was fixed for once
+  already.
+
 ## [0.6.1] — 2026-09-14
 
 ### Changed
