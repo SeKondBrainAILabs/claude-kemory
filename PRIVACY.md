@@ -18,6 +18,7 @@ analytics and no third-party endpoint of its own.
 | prompt recall | `UserPromptSubmit` | **The text of your prompt**, as a search query | on |
 | recall approval | `PreToolUse` | Nothing — runs entirely locally | on |
 | rate reminder | `PostToolUse` | Nothing — runs entirely locally | on |
+| store nudge | `Stop` | Nothing — reads the transcript on your machine and prints guidance | **off** |
 | session capture | `Stop`, `SessionEnd` | Your own prompts: last 12 turns, 8000 characters max, redacted | **off** |
 
 Prompt recall skips prompts under 12 characters and any prompt starting with
@@ -73,7 +74,7 @@ type there.
 
 ## Local files
 
-`~/.kemory/.captured/` holds per-session digest hashes for de-duplication and
+`~/.kemory/.captured/` and `~/.kemory/.nudged/` holds per-session digest hashes for de-duplication and
 `~/.kemory/.setup-hint` holds a timestamp. Neither contains conversation
 content. The plugin never writes credentials anywhere and never logs them.
 

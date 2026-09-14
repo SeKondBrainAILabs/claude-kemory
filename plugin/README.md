@@ -118,6 +118,8 @@ export KEMORY_AUTO_CAPTURE=1
 
 | Variable | Default | Meaning |
 |----------|---------|---------|
+| `KEMORY_STORE_NUDGE` | `0` | Set to `1` to ask for a write when a turn settled something and stored nothing |
+| `KEMORY_STORE_NUDGE_SIGNALS` | — | Extra `\|`-separated regexes that mark a turn as worth storing, added to the built-in set |
 | `KEMORY_AUTO_CAPTURE` | `0` | Set to `1` to enable capture |
 | `KEMORY_CAPTURE_NAMESPACE` | `shared` | Namespace to write digests to |
 | `KEMORY_CAPTURE_MAX_TURNS` | `12` | Maximum user turns in a single stored memory |
